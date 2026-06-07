@@ -1,0 +1,95 @@
+name: rorr-terraform
+
+# Deploy RORR infrastructure. Each protected branch maps to its own GitHub
+# Environment (and therefore its own AWS account credentials and state bucket).
+on:
+  push:
+    branches: [develop, staging, prod]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    branches: [develop, staging, prod]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    # Branch name doubles as the environment name (develop/staging/prod).
+    environment: ${{ github.ref_name }}
+    env:
+      ENV: ${{ github.ref_name }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_IN_AUTOMATION: "true"
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Terraform Init
+        run: |
+          terraform init -no-color \
+            -backend-config="bucket=ai-rorr-tfstate-${ENV}" \
+            -backend-config="key=rorr/${ENV}/terraform.tfstate"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive -no-color
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -input=false -var="env=${ENV}" -out=tfplan
+
+      # apply only on push to a protected branch, never on pull_request.
+      - name: Terraform Apply
+        if: github.event_name == 'push'
+        run: terraform apply -no-color -input=false -auto-approve tfplan
+
+      # Persist live connection info back into ai/rorr/{env} for components to read.
+      - name: Update ai/rorr secret with connection info
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          MSK=$(terraform output -raw -no-color msk_bootstrap_brokers)
+          REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
+          REDIS_PORT=$(terraform output -raw -no-color redis_port)
+          DB_HOST=$(terraform output -raw -no-color main_db_private_ip)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/rorr/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg msk "$MSK" \
+            --arg rh "$REDIS_HOST" \
+            --arg rp "$REDIS_PORT" \
+            --arg dh "$DB_HOST" \
+            '.msk_bootstrap_servers=$msk | .redis_host=$rh | .redis_port=$rp | .db_host=$dh')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/rorr/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
