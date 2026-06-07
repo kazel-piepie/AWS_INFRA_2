@@ -23,11 +23,50 @@ locals {
         provectuslabs/kafka-ui:latest
     EOT
     main_db                = <<-EOT
-      dnf -y install postgresql16-server postgresql16
+      # 1. TimescaleDB YUM repository
+      cat > /etc/yum.repos.d/timescale_timescaledb.repo << 'REPOEOF'
+      [timescale_timescaledb]
+      name=timescale_timescaledb
+      baseurl=https://packagecloud.io/timescale/timescaledb/el/8/$basearch
+      repo_gpgcheck=1
+      gpgcheck=0
+      enabled=1
+      gpgkey=https://packagecloud.io/timescale/timescaledb/gpgkey
+      sslverify=1
+      sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+      metadata_expire=300
+      REPOEOF
+
+      # 2. Install PostgreSQL and TimescaleDB
+      dnf -y install postgresql16-server postgresql16 timescaledb-2-postgresql-16
+
+      # 3. Init DB and configure before starting
       /usr/bin/postgresql-setup --initdb
+      sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /var/lib/pgsql/data/postgresql.conf
+      echo "shared_preload_libraries = 'timescaledb'" >> /var/lib/pgsql/data/postgresql.conf
+      echo "host all all 0.0.0.0/0 md5" >> /var/lib/pgsql/data/pg_hba.conf
+
+      # 4. Start PostgreSQL
       systemctl enable --now postgresql
-      # TimescaleDB extension (community packages).
-      dnf -y install gcc make || true
+
+      # 5. Tune TimescaleDB
+      timescaledb-tune --quiet --yes || true
+
+      # 6. Generate password and create ai user + database
+      DB_PASS=$(openssl rand -hex 16)
+      sudo -u postgres psql -c "CREATE USER ai WITH PASSWORD '$DB_PASS';"
+      sudo -u postgres psql -c "CREATE DATABASE ai OWNER ai;"
+      sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ai TO ai;"
+      sudo -u postgres psql -d ai -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+
+      # 7. Get private DNS name via IMDSv2
+      IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+      PRIVATE_DNS=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-hostname)
+
+      # 8. Save db_host and db_password to Secrets Manager
+      CURRENT_SECRET=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
+      UPDATED_SECRET=$(echo "$CURRENT_SECRET" | jq --arg h "$PRIVATE_DNS" --arg p "$DB_PASS" '.db_host = $h | .db_password = $p')
+      aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager
     EOT
   }
 }
