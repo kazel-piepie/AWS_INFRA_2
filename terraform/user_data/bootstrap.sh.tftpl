@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+
+# --- RORR base bootstrap (cloud-init) ---------------------------------------
+dnf -y update
+dnf -y install jq awscli
+
+# Fetch the ai/rorr secret once and export each key as an environment variable
+# into /etc/rorr/rorr.env for the application to source.
+mkdir -p /etc/rorr
+SECRET=$(aws secretsmanager get-secret-value \
+  --secret-id "${secret_name}" \
+  --region "${region}" \
+  --query SecretString --output text --no-cli-pager)
+
+echo "$SECRET" | jq -r 'to_entries | .[] | "RORR_" + (.key | ascii_upcase) + "=" + (.value | tostring)' \
+  > /etc/rorr/rorr.env
+chmod 600 /etc/rorr/rorr.env
+
+# --- Component-specific setup ----------------------------------------------
+${component_setup}
+
+echo "rorr bootstrap complete for component: ${component_name}"
