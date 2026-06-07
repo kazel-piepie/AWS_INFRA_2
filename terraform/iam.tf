@@ -35,6 +35,23 @@ resource "aws_iam_policy" "rorr_secret_read" {
   policy      = data.aws_iam_policy_document.rorr_secret_read.json
 }
 
+# Least-privilege write of only the ai/rorr/{env} secret (main_db only).
+# main_db bootstrap generates the DB password and stores db_host/db_password.
+data "aws_iam_policy_document" "rorr_secret_write" {
+  statement {
+    sid       = "WriteRorrSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:PutSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr.arn]
+  }
+}
+
+resource "aws_iam_policy" "rorr_secret_write" {
+  name        = "${local.name_prefix}-secret-write"
+  description = "Write only the ai/rorr secret for this environment"
+  policy      = data.aws_iam_policy_document.rorr_secret_write.json
+}
+
 # Bedrock invoke for LoL AI (Sonnet model inference).
 data "aws_iam_policy_document" "bedrock_invoke" {
   statement {
@@ -84,6 +101,12 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
 resource "aws_iam_role_policy_attachment" "bedrock" {
   role       = aws_iam_role.ec2["lol_ai"].name
   policy_arn = aws_iam_policy.bedrock_invoke.arn
+}
+
+# PutSecretValue only for main_db (writes db_host / db_password on bootstrap).
+resource "aws_iam_role_policy_attachment" "secret_write" {
+  role       = aws_iam_role.ec2["main_db"].name
+  policy_arn = aws_iam_policy.rorr_secret_write.arn
 }
 
 resource "aws_iam_instance_profile" "ec2" {
