@@ -113,6 +113,9 @@ resource "aws_instance" "main_db" {
   vpc_security_group_ids = [aws_security_group.db.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2["main_db"].name
 
+  # Force instance replacement when user_data changes so a new bootstrap runs.
+  user_data_replace_on_change = true
+
   user_data = templatefile("${path.module}/user_data/bootstrap.sh.tftpl", {
     secret_name     = local.secret_name
     region          = var.region
