@@ -31,6 +31,15 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.app.id]
   }
 
+  # Backend ECS Fargate tasks connect to the main DB (PostgreSQL 5432).
+  ingress {
+    description     = "PostgreSQL from backend ECS tasks"
+    from_port       = var.backend_db_port
+    to_port         = var.backend_db_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend_ecs.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
