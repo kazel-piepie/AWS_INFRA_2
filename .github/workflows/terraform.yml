@@ -93,3 +93,27 @@ jobs:
             --region "${AWS_REGION}" \
             --secret-string "$UPDATED" \
             --no-cli-pager
+
+      # Persist the backend ALB endpoint back into ai/rorr-infra/{env}.
+      - name: Update ai/rorr-infra secret with backend ALB info
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          ALB_DNS=$(terraform output -raw -no-color backend_alb_dns_name)
+          ALB_ARN=$(terraform output -raw -no-color backend_alb_arn)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg dns "$ALB_DNS" \
+            --arg arn "$ALB_ARN" \
+            '.alb.dns=$dns | .alb.arn=$arn')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager

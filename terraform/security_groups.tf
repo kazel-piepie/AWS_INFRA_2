@@ -31,6 +31,15 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.app.id]
   }
 
+  # Allow the backend Fargate service to reach the main DB on its port.
+  ingress {
+    description     = "PostgreSQL from backend service tasks"
+    from_port       = var.backend_db_port
+    to_port         = var.backend_db_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend_task.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
