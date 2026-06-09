@@ -37,10 +37,24 @@ locals {
       metadata_expire=300
       REPOEOF
 
-      # 2. Install PostgreSQL and TimescaleDB
-      dnf -y install postgresql16-server postgresql16 timescaledb-2-postgresql-16
+      # 2. Install native PostgreSQL 16 first so /usr/bin/pg_config exists before
+      #    TimescaleDB's RPM scriptlets run.
+      dnf -y install postgresql16-server postgresql16
 
-      # 2b. Make TimescaleDB libraries discoverable by the Amazon Linux native
+      # 2a. The el8 TimescaleDB RPM %post invokes /usr/pgsql-16/bin/pg_config (the
+      #     PGDG directory layout), but AL2023's native postgresql16 package ships
+      #     pg_config at /usr/bin/pg_config. Without that path the %post scriptlet
+      #     cannot find pg_config and the install fails. Create the expected path
+      #     as a symlink before installing TimescaleDB (skip if already present).
+      if [ ! -e /usr/pgsql-16/bin/pg_config ]; then
+        mkdir -p /usr/pgsql-16/bin
+        ln -sf /usr/bin/pg_config /usr/pgsql-16/bin/pg_config
+      fi
+
+      # 2b. Install TimescaleDB now that pg_config is discoverable.
+      dnf -y install timescaledb-2-postgresql-16
+
+      # 2c. Make TimescaleDB libraries discoverable by the Amazon Linux native
       # postgresql16 build. The el8 TimescaleDB RPMs install the loader and
       # versioned libraries under /usr/lib64/timescaledb-*-pg16, not the native
       # postgres library dir (/usr/lib64/pgsql). Without this, postgres cannot
@@ -50,10 +64,18 @@ locals {
       ln -sf /usr/lib64/timescaledb-loader-pg16/timescaledb.so "$PG_LIBDIR/timescaledb.so"
       for so in /usr/lib64/timescaledb-pg16/*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
 
-      # 3. Mount the dedicated EBS data volume at the PostgreSQL data directory.
+      # 3. Mount the dedicated EBS data volume at /var/lib/pgsql (the postgres
+      #    home), NOT directly at the data directory. A fresh ext4 filesystem
+      #    contains a lost+found at its root; mounting it on the data dir would
+      #    place lost+found *inside* PGDATA and make initdb refuse to run with
+      #    "directory not empty". Mounting one level up keeps lost+found at
+      #    /var/lib/pgsql/lost+found, separate from the PGDATA subdirectory
+      #    /var/lib/pgsql/data. PGDATA stays the AL2023 native default, so the
+      #    stock postgresql systemd unit needs no override.
       #    The volume is attached as /dev/xvdf but surfaces as an NVMe device on
       #    Nitro instances, so resolve the real device node before using it.
-      PG_DATA_DIR=/var/lib/pgsql/data
+      PG_MOUNT_DIR=/var/lib/pgsql
+      PG_DATA_DIR=$PG_MOUNT_DIR/data
       DATA_DEV=""
       for attempt in $(seq 1 30); do
         for cand in /dev/xvdf /dev/sdf; do
@@ -76,14 +98,18 @@ locals {
         mkfs.ext4 -L pgdata "$DATA_DEV"
       fi
 
-      # 3b. Mount and persist in fstab by UUID (nofail so a missing volume does
-      #     not block boot). PostgreSQL requires the data dir owned by postgres.
-      mkdir -p "$PG_DATA_DIR"
+      # 3b. Mount the volume at $PG_MOUNT_DIR and persist in fstab by UUID (nofail
+      #     so a missing volume does not block boot). Then create the PGDATA
+      #     subdirectory, which PostgreSQL requires to be owned by postgres and
+      #     mode 0700. lost+found stays at $PG_MOUNT_DIR/lost+found, outside PGDATA.
+      mkdir -p "$PG_MOUNT_DIR"
       DATA_UUID=$(blkid -s UUID -o value "$DATA_DEV")
       if ! grep -q "$DATA_UUID" /etc/fstab; then
-        echo "UUID=$DATA_UUID $PG_DATA_DIR ext4 defaults,nofail 0 2" >> /etc/fstab
+        echo "UUID=$DATA_UUID $PG_MOUNT_DIR ext4 defaults,nofail 0 2" >> /etc/fstab
       fi
-      mountpoint -q "$PG_DATA_DIR" || mount "$PG_DATA_DIR"
+      mountpoint -q "$PG_MOUNT_DIR" || mount "$PG_MOUNT_DIR"
+      chown postgres:postgres "$PG_MOUNT_DIR"
+      mkdir -p "$PG_DATA_DIR"
       chown postgres:postgres "$PG_DATA_DIR"
       chmod 700 "$PG_DATA_DIR"
 
