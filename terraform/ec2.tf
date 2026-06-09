@@ -40,17 +40,27 @@ locals {
       # 2. Install PostgreSQL and TimescaleDB
       dnf -y install postgresql16-server postgresql16 timescaledb-2-postgresql-16
 
+      # 2b. Make TimescaleDB libraries discoverable by the Amazon Linux native
+      # postgresql16 build. The el8 TimescaleDB RPMs install the loader and
+      # versioned libraries under /usr/lib64/timescaledb-*-pg16, not the native
+      # postgres library dir (/usr/lib64/pgsql). Without this, postgres cannot
+      # resolve the 'timescaledb' preload library and dies at startup with
+      # FATAL: could not access file "timescaledb". Symlink them in before start.
+      PG_LIBDIR=/usr/lib64/pgsql
+      ln -sf /usr/lib64/timescaledb-loader-pg16/timescaledb.so "$PG_LIBDIR/timescaledb.so"
+      for so in /usr/lib64/timescaledb-pg16/*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
+
       # 3. Init DB and configure before starting
       /usr/bin/postgresql-setup --initdb
       sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /var/lib/pgsql/data/postgresql.conf
       echo "shared_preload_libraries = 'timescaledb'" >> /var/lib/pgsql/data/postgresql.conf
       echo "host all all 0.0.0.0/0 md5" >> /var/lib/pgsql/data/pg_hba.conf
 
-      # 4. Start PostgreSQL
-      systemctl enable --now postgresql
-
-      # 5. Tune TimescaleDB
+      # 4. Tune TimescaleDB before first start so settings take effect on boot
       timescaledb-tune --quiet --yes || true
+
+      # 5. Start PostgreSQL
+      systemctl enable --now postgresql
 
       # 6. Generate password and create ai user + database
       DB_PASS=$(openssl rand -hex 16)
