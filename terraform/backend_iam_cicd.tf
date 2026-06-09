@@ -83,6 +83,20 @@ data "aws_iam_policy_document" "backend_cicd" {
     }
   }
 
+  # Run a standalone backend task (one-off jobs / migrations), scoped to any
+  # revision of the backend task definition and limited to the backend cluster.
+  statement {
+    sid       = "RunBackendStandaloneTask"
+    effect    = "Allow"
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:aws:ecs:${local.region_id}:${local.account_id}:task-definition/${aws_ecs_task_definition.backend.family}:*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.backend.arn]
+    }
+  }
+
   # PassRole limited to the backend task execution + task roles, and only to
   # the ECS tasks service.
   statement {
