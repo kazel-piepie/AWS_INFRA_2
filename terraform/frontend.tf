@@ -168,6 +168,11 @@ resource "aws_iam_access_key" "frontend_cicd" {
 }
 
 data "aws_iam_policy_document" "frontend_cicd" {
+  # Merge in the frontend-resources S3/CloudFront statements (defined in
+  # frontend-resources.tf) so this user keeps a single inline policy,
+  # ai-rorr-${env}-frontend-cicd-policy.
+  source_policy_documents = [data.aws_iam_policy_document.frontend_cicd_resources.json]
+
   # --- Secrets Manager: only the ai/rorr-infra secret, read-only. ---
   statement {
     sid    = "ReadInfraSecret"
