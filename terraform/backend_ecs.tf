@@ -89,6 +89,24 @@ resource "aws_iam_role_policy_attachment" "backend_task_execution_secret" {
   policy_arn = aws_iam_policy.rorr_secret_read.arn
 }
 
+# AmazonECSTaskExecutionRolePolicy grants CreateLogStream / PutLogEvents but not
+# CreateLogGroup. The log group is pre-created (aws_cloudwatch_log_group.backend),
+# but grant CreateLogGroup as a safeguard against deletion / awslogs-create-group.
+data "aws_iam_policy_document" "backend_logs_create" {
+  statement {
+    sid       = "CreateBackendLogGroup"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogGroup"]
+    resources = ["arn:aws:logs:${local.region_id}:${local.account_id}:log-group:/ecs/${local.name_prefix}-backend:*"]
+  }
+}
+
+resource "aws_iam_role_policy" "backend_logs_create" {
+  name   = "${local.name_prefix}-backend-logs-create"
+  role   = aws_iam_role.backend_task_execution.id
+  policy = data.aws_iam_policy_document.backend_logs_create.json
+}
+
 # ---------------------------------------------------------------------------
 # Task role (application runtime permissions).
 # ---------------------------------------------------------------------------
