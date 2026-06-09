@@ -46,6 +46,15 @@ locals {
     prod    = 500
   }
 
+  # Main DB dedicated data volume size (GiB) per environment. PostgreSQL data
+  # lives on this separate EBS volume so the database survives main_db instance
+  # replacement (user_data_replace_on_change recreates the instance).
+  main_db_data_volume_size = {
+    develop = 20
+    staging = 100
+    prod    = 500
+  }
+
   # ElastiCache Redis node type per environment.
   redis_node_type = {
     develop = "cache.t3.micro"
