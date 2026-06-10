@@ -119,14 +119,14 @@ resource "aws_cloudfront_distribution" "frontend" {
     error_code            = 403
     response_code         = 200
     response_page_path    = "/index.html"
-    error_caching_min_ttl = 10
+    error_caching_min_ttl = 0
   }
 
   custom_error_response {
     error_code            = 404
     response_code         = 200
     response_page_path    = "/index.html"
-    error_caching_min_ttl = 10
+    error_caching_min_ttl = 0
   }
 
   restrictions {
