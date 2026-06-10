@@ -153,6 +153,32 @@ locals {
       sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ai TO ai;"
       sudo -u postgres psql -d ai -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
 
+      # 6a-1. Elevate the ai application role and grant it full object privileges
+      #       on the public schema of every existing application database.
+      #       Scope is deliberately limited: grant CREATEDB only, and explicitly
+      #       deny CREATEROLE and SUPERUSER (no user-creation, no superuser).
+      #       Object grants are issued WITHOUT GRANT OPTION (ai cannot re-grant).
+      #       Idempotent: re-running ALTER ROLE / GRANT is a no-op, and each
+      #       database is touched only if it already exists, so this is safe on
+      #       re-attached data volumes and fresh instances alike.
+      sudo -u postgres psql -c "ALTER ROLE ai WITH CREATEDB NOCREATEROLE NOSUPERUSER;"
+      for DB_NAME in ai test; do
+        if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
+          sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO ai;"
+        fi
+      done
+
+      # 6a-2. Log the resulting ai role attributes so the grant can be verified
+      #       from the cloud-init / bootstrap output after provisioning.
+      sudo -u postgres psql -c "SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin, rolreplication, rolbypassrls, rolconnlimit FROM pg_roles WHERE rolname='ai';"
+
       # 7. Get the instance private IP via IMDSv2.
       IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
       PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
