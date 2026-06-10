@@ -10,6 +10,11 @@ output "backend_alb_zone_id" {
   value       = aws_lb.backend.zone_id
 }
 
+output "backend_api_domain" {
+  description = "Backend API custom domain. Create an A/ALIAS record for this in rorr.club DNS pointing at backend_alb_dns_name (zone backend_alb_zone_id) unless Terraform manages it via api_domain_route53_zone_id."
+  value       = local.backend_api_domain
+}
+
 output "backend_ecr_repository_url" {
   description = "ECR repository URL for the backend image"
   value       = aws_ecr_repository.backend.repository_url

@@ -34,6 +34,16 @@ this stack's VPC (Fargate tasks in private subnets, ALB in public subnets).
 - **ALB** `ai-rorr-{env}-backend-alb` — **HTTPS (443) only** using the
   `*.rorr.club` ACM cert and `ELBSecurityPolicy-TLS13-1-2-2021-06` (no port 80).
   Idle timeout and target-group stickiness are both 600s (10-minute sessions).
+- **Custom domain** `ai-dev-api.rorr.club` (`backend_dns.tf`) — the frontend
+  must call the backend via this rorr.club subdomain, **not** the raw
+  `*.elb.amazonaws.com` ALB name (which the `*.rorr.club` cert does not cover →
+  `ERR_CERT_COMMON_NAME_INVALID`). TLS is already terminated by the wildcard
+  cert already on the listener, so no extra cert is needed. The A/ALIAS record
+  is managed out-of-band like the frontend records (rorr.club is not a Route53
+  zone in this account); point `ai-dev-api.rorr.club` at the
+  `backend_alb_dns_name` output (zone `backend_alb_zone_id`). If the rorr.club
+  zone becomes reachable from the deploy account, set `api_domain_route53_zone_id`
+  to have Terraform manage the record.
 - **CI/CD IAM user** `ai-rorr-{env}-backend-cicd` — least-privilege: read of
   only `ai/rorr-infra/{env}-*` and `ai/rorr/{env}-*`, scoped ECS deploy on the
   backend cluster/service, scoped `iam:PassRole` for the backend ECS roles, and

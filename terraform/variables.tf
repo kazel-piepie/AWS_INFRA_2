@@ -67,3 +67,14 @@ variable "backend_session_timeout" {
   type        = number
   default     = 600
 }
+
+# Route53 hosted zone id for rorr.club. rorr.club is not hosted in this AWS
+# account, so this is empty by default and the backend API alias record is not
+# managed by Terraform (the record is created out-of-band, like the frontend
+# records). Set it to a reachable rorr.club zone id to have Terraform manage the
+# ai-dev-api.rorr.club A-alias record (see backend_dns.tf).
+variable "api_domain_route53_zone_id" {
+  description = "Route53 hosted zone id for rorr.club; when set, the backend API A-alias record is managed by Terraform. Empty = managed out-of-band (default)."
+  type        = string
+  default     = ""
+}
