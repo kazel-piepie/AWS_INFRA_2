@@ -226,8 +226,11 @@ resource "aws_instance" "app" {
 }
 
 # Main DB (PostgreSQL + TimescaleDB) in private subnet.
+# AMI is pinned to prevent unintended instance replacement when Amazon releases
+# a new AL2023 build. Update this value deliberately when upgrading the OS.
+# Current: al2023-ami-2023.12.20260611.0-kernel-6.1-x86_64
 resource "aws_instance" "main_db" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = "ami-0521cb2d60cfbb1a6"
   instance_type          = local.specs.main_db
   subnet_id              = aws_subnet.private[0].id
   vpc_security_group_ids = [aws_security_group.db.id]
