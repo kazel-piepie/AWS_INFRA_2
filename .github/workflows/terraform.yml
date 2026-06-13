@@ -93,3 +93,28 @@ jobs:
             --region "${AWS_REGION}" \
             --secret-string "$UPDATED" \
             --no-cli-pager
+
+      # Persist the DataCenter CI/CD IAM user access key into the deploy-account
+      # secret so external CI/CD runners can authenticate.
+      - name: Store DataCenter CI/CD credentials in ai/service/account secret
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          DC_KEY_ID=$(terraform output -raw -no-color datacenter_cicd_access_key_id)
+          DC_SECRET=$(terraform output -raw -no-color datacenter_cicd_secret_access_key)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/service/account/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg id "$DC_KEY_ID" \
+            --arg secret "$DC_SECRET" \
+            '.aws_access_key_id=$id | .aws_secret_access_key=$secret')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/service/account/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
