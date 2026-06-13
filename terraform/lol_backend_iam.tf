@@ -27,6 +27,25 @@ data "aws_secretsmanager_secret" "rorr_ecs_services" {
   name = "rorr/develop/ecs-services"
 }
 
+# Per-concern application secrets, created out-of-band by the MCP server and
+# referenced here (never managed). Each task role is granted GetSecretValue
+# only on the secrets it actually reads at runtime (least privilege).
+data "aws_secretsmanager_secret" "rorr_database" {
+  name = "rorr/develop/database"
+}
+
+data "aws_secretsmanager_secret" "rorr_riot" {
+  name = "rorr/develop/riot"
+}
+
+data "aws_secretsmanager_secret" "rorr_kafka" {
+  name = "rorr/develop/kafka"
+}
+
+data "aws_secretsmanager_secret" "rorr_redis" {
+  name = "rorr/develop/redis"
+}
+
 # ---------------------------------------------------------------------------
 # Shared execution role: pull image from ECR, write logs, inject the rorr
 # secret. (reuses the existing ecs-tasks assume policy and rorr_secret_read.)
@@ -107,6 +126,16 @@ data "aws_iam_policy_document" "lol_collector" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
+  statement {
+    sid     = "AppSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_database.arn,
+      data.aws_secretsmanager_secret.rorr_riot.arn,
+      data.aws_secretsmanager_secret.rorr_redis.arn,
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_collector" {
@@ -140,6 +169,15 @@ data "aws_iam_policy_document" "lol_raw_store" {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
+  statement {
+    sid     = "AppSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_database.arn,
+      data.aws_secretsmanager_secret.rorr_kafka.arn,
+    ]
   }
 }
 
@@ -181,6 +219,12 @@ data "aws_iam_policy_document" "lol_processor" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
+  statement {
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_kafka.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_processor" {
@@ -214,6 +258,15 @@ data "aws_iam_policy_document" "lol_processed_store" {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
+  statement {
+    sid     = "AppSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_database.arn,
+      data.aws_secretsmanager_secret.rorr_kafka.arn,
+    ]
   }
 }
 
@@ -261,6 +314,15 @@ data "aws_iam_policy_document" "lol_contextualizer" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
+  statement {
+    sid     = "AppSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_database.arn,
+      data.aws_secretsmanager_secret.rorr_kafka.arn,
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_contextualizer" {
@@ -294,6 +356,15 @@ data "aws_iam_policy_document" "lol_processed_deliverer" {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
+  statement {
+    sid     = "AppSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_kafka.arn,
+      data.aws_secretsmanager_secret.rorr_redis.arn,
+    ]
   }
 }
 
@@ -329,6 +400,15 @@ data "aws_iam_policy_document" "lol_context_store" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
+  statement {
+    sid     = "AppSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_database.arn,
+      data.aws_secretsmanager_secret.rorr_kafka.arn,
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_context_store" {
@@ -362,6 +442,15 @@ data "aws_iam_policy_document" "lol_context_deliverer" {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
+  statement {
+    sid     = "AppSecrets"
+    effect  = "Allow"
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_kafka.arn,
+      data.aws_secretsmanager_secret.rorr_redis.arn,
+    ]
   }
 }
 
