@@ -67,6 +67,15 @@ resource "aws_security_group" "redis" {
     security_groups = [aws_security_group.app.id]
   }
 
+  # LOL backend deliverers/collector cache to Redis via the backend ECS SG.
+  ingress {
+    description     = "Redis from backend ECS tasks"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend_ecs.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
@@ -135,6 +144,23 @@ resource "aws_security_group" "msk" {
     to_port         = 9092
     protocol        = "tcp"
     security_groups = [aws_security_group.kafka_ui.id]
+  }
+
+  # LOL backend pipeline ECS tasks reach MSK via the shared backend ECS SG.
+  ingress {
+    description     = "Kafka plaintext from backend ECS tasks"
+    from_port       = 9092
+    to_port         = 9092
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend_ecs.id]
+  }
+
+  ingress {
+    description     = "Kafka TLS from backend ECS tasks"
+    from_port       = 9094
+    to_port         = 9094
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend_ecs.id]
   }
 
   egress {
