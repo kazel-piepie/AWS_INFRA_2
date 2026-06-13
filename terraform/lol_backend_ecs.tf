@@ -52,8 +52,8 @@ resource "aws_ecs_task_definition" "lol" {
   network_mode             = "awsvpc"
   cpu                      = 256
   memory                   = 512
-  execution_role_arn       = aws_iam_role.lol_execution.arn
-  task_role_arn            = aws_iam_role.lol_task[each.value].arn
+  execution_role_arn       = aws_iam_role.rorr_lol_execution_role.arn
+  task_role_arn            = local.rorr_lol_task_roles[each.value].arn
 
   container_definitions = jsonencode([
     {

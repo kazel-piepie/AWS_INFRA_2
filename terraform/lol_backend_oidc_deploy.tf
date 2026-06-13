@@ -60,8 +60,8 @@ locals {
 
   # PassRole targets: the shared execution role + all module task roles.
   lol_passrole_arns = concat(
-    [aws_iam_role.lol_execution.arn],
-    [for r in aws_iam_role.lol_task : r.arn],
+    [aws_iam_role.rorr_lol_execution_role.arn],
+    [for r in local.rorr_lol_task_roles : r.arn],
   )
 }
 
