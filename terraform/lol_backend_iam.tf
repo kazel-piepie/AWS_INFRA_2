@@ -21,6 +21,12 @@ locals {
   lol_collector_service_arn = "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/rorr-lol-collector"
 }
 
+# Existing secret holding the LOL backend ECS service ARNs + ECR repo URI.
+# Created out-of-band by the MCP server; referenced here (never managed).
+data "aws_secretsmanager_secret" "rorr_ecs_services" {
+  name = "rorr/develop/ecs-services"
+}
+
 # ---------------------------------------------------------------------------
 # Shared execution role: pull image from ECR, write logs, inject the rorr
 # secret. (reuses the existing ecs-tasks assume policy and rorr_secret_read.)
@@ -95,6 +101,12 @@ data "aws_iam_policy_document" "lol_collector" {
     actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
     resources = [local.lol_log_group_arns["rorr-lol-collector"]]
   }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_collector" {
@@ -122,6 +134,12 @@ data "aws_iam_policy_document" "lol_raw_store" {
     effect    = "Allow"
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-raw-store"]]
+  }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
 }
 
@@ -157,6 +175,12 @@ data "aws_iam_policy_document" "lol_processor" {
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-processor"]]
   }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_processor" {
@@ -184,6 +208,12 @@ data "aws_iam_policy_document" "lol_processed_store" {
     effect    = "Allow"
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-processed-store"]]
+  }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
 }
 
@@ -225,6 +255,12 @@ data "aws_iam_policy_document" "lol_contextualizer" {
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-contextualizer"]]
   }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_contextualizer" {
@@ -252,6 +288,12 @@ data "aws_iam_policy_document" "lol_processed_deliverer" {
     effect    = "Allow"
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-processed-deliverer"]]
+  }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
 }
 
@@ -281,6 +323,12 @@ data "aws_iam_policy_document" "lol_context_store" {
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-context-store"]]
   }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "lol_context_store" {
@@ -308,6 +356,12 @@ data "aws_iam_policy_document" "lol_context_deliverer" {
     effect    = "Allow"
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-context-deliverer"]]
+  }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_ecs_services.arn]
   }
 }
 
