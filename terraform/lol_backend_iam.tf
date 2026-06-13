@@ -80,7 +80,7 @@ data "aws_iam_policy_document" "lol_collector" {
   statement {
     sid       = "Topics"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:WriteData", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.live_games, local.lol_topic_arns.raw]
   }
   statement {
@@ -114,7 +114,7 @@ data "aws_iam_policy_document" "lol_raw_store" {
   statement {
     sid       = "TopicRaw"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.raw]
   }
   statement {
@@ -142,13 +142,13 @@ data "aws_iam_policy_document" "lol_processor" {
   statement {
     sid       = "TopicRawRead"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.raw]
   }
   statement {
     sid       = "TopicProcessedWrite"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:WriteData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData"]
     resources = [local.lol_topic_arns.processed]
   }
   statement {
@@ -176,7 +176,7 @@ data "aws_iam_policy_document" "lol_processed_store" {
   statement {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.processed]
   }
   statement {
@@ -204,13 +204,13 @@ data "aws_iam_policy_document" "lol_contextualizer" {
   statement {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.processed]
   }
   statement {
     sid       = "TopicContextWrite"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:WriteData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData"]
     resources = [local.lol_topic_arns.context]
   }
   statement {
@@ -244,7 +244,7 @@ data "aws_iam_policy_document" "lol_processed_deliverer" {
   statement {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.processed]
   }
   statement {
@@ -272,7 +272,7 @@ data "aws_iam_policy_document" "lol_context_store" {
   statement {
     sid       = "TopicContextRead"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.context]
   }
   statement {
@@ -300,7 +300,7 @@ data "aws_iam_policy_document" "lol_context_deliverer" {
   statement {
     sid       = "TopicContextRead"
     effect    = "Allow"
-    actions   = ["kafka:CreateTopic", "kafka:DescribeTopic", "kafka:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.context]
   }
   statement {
