@@ -187,7 +187,7 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
   statement {
     sid       = "Topics"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:ReadData"]
     resources = [local.lol_topic_arns.live_games, local.lol_topic_arns.raw]
   }
   statement {
@@ -287,7 +287,7 @@ data "aws_iam_policy_document" "rorr_lol_processor" {
   statement {
     sid       = "TopicProcessedWrite"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
     resources = [local.lol_topic_arns.processed]
   }
   statement {
@@ -376,7 +376,7 @@ data "aws_iam_policy_document" "rorr_lol_contextualizer" {
   statement {
     sid       = "TopicContextWrite"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
     resources = [local.lol_topic_arns.context]
   }
   statement {
