@@ -3,6 +3,11 @@
 # module (least privilege, scoped to the exact MSK cluster/topics it touches).
 # ---------------------------------------------------------------------------
 locals {
+  # MSK consumer-group ARN prefix derived from the cluster ARN (cluster/ ->
+  # group/), mirroring msk_topic_arn_prefix so group ARNs need no hardcoded
+  # cluster UUID and survive a cluster replacement.
+  msk_group_arn_prefix = replace(aws_msk_cluster.main.arn, ":cluster/", ":group/")
+
   # Helper: full MSK topic ARN for an IAM resource.
   lol_topic_arns = {
     live_games = "${local.msk_topic_arn_prefix}/rorr-lol-live-games"
@@ -197,6 +202,15 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
     resources = [local.lol_collector_service_arn]
   }
   statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "Logs"
     effect    = "Allow"
     actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -240,6 +254,15 @@ data "aws_iam_policy_document" "rorr_lol_raw_store" {
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -291,6 +314,15 @@ data "aws_iam_policy_document" "rorr_lol_processor" {
     resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "Logs"
     effect    = "Allow"
     actions   = ["logs:*"]
@@ -329,6 +361,15 @@ data "aws_iam_policy_document" "rorr_lol_processed_store" {
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -386,6 +427,15 @@ data "aws_iam_policy_document" "rorr_lol_contextualizer" {
     resources = ["arn:aws:bedrock:${local.region_id}::foundation-model/*"]
   }
   statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "Logs"
     effect    = "Allow"
     actions   = ["logs:*"]
@@ -427,6 +477,15 @@ data "aws_iam_policy_document" "rorr_lol_processed_deliverer" {
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -472,6 +531,15 @@ data "aws_iam_policy_document" "rorr_lol_context_store" {
     resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "Logs"
     effect    = "Allow"
     actions   = ["logs:*"]
@@ -513,6 +581,15 @@ data "aws_iam_policy_document" "rorr_lol_context_deliverer" {
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid    = "ConsumerGroup"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+      "kafka-cluster:DescribeGroup",
+    ]
+    resources = ["${local.msk_group_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
