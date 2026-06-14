@@ -181,7 +181,7 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect", "kafka-cluster:AlterCluster"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:AlterCluster", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
@@ -232,7 +232,7 @@ data "aws_iam_policy_document" "rorr_lol_raw_store" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
@@ -275,7 +275,7 @@ data "aws_iam_policy_document" "rorr_lol_processor" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
@@ -321,7 +321,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_store" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
@@ -364,7 +364,7 @@ data "aws_iam_policy_document" "rorr_lol_contextualizer" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
@@ -419,7 +419,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_deliverer" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
@@ -462,7 +462,7 @@ data "aws_iam_policy_document" "rorr_lol_context_store" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
@@ -505,7 +505,7 @@ data "aws_iam_policy_document" "rorr_lol_context_deliverer" {
   statement {
     sid       = "MskConnect"
     effect    = "Allow"
-    actions   = ["kafka-cluster:Connect"]
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently"]
     resources = [aws_msk_cluster.main.arn]
   }
   statement {
