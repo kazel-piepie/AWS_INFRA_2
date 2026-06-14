@@ -216,6 +216,7 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
       data.aws_secretsmanager_secret.rorr_lol_database.arn,
       data.aws_secretsmanager_secret.rorr_lol_riot.arn,
       data.aws_secretsmanager_secret.rorr_lol_redis.arn,
+      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
     ]
   }
 }
