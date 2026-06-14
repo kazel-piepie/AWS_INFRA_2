@@ -5,10 +5,10 @@
 locals {
   # Helper: full MSK topic ARN for an IAM resource.
   lol_topic_arns = {
-    live_games = "${local.msk_topic_arn_prefix}/live-games"
-    raw        = "${local.msk_topic_arn_prefix}/raw"
-    processed  = "${local.msk_topic_arn_prefix}/processed"
-    context    = "${local.msk_topic_arn_prefix}/context"
+    live_games = "${local.msk_topic_arn_prefix}/rorr-lol-live-games"
+    raw        = "${local.msk_topic_arn_prefix}/rorr-lol-raw"
+    processed  = "${local.msk_topic_arn_prefix}/rorr-lol-processed"
+    context    = "${local.msk_topic_arn_prefix}/rorr-lol-context"
   }
 
   # Log group ARN per module (scopes the logs:* / logs:Create* grants).
