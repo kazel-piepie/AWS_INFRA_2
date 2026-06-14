@@ -39,8 +39,14 @@ resource "aws_msk_cluster" "main" {
 
   encryption_info {
     encryption_in_transit {
-      client_broker = "TLS_PLAINTEXT"
+      client_broker = "TLS"
       in_cluster    = true
+    }
+  }
+
+  client_authentication {
+    sasl {
+      iam = true
     }
   }
 
