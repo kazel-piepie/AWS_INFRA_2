@@ -93,16 +93,19 @@ resource "aws_ecs_task_definition" "lol" {
   }
 }
 
-# Service per module on the existing backend cluster. desired_count = 0 for the
-# initial deploy (collector is scale-controlled at runtime; the rest are started
-# manually). CI/CD rolls image/task-definition out of band, so ignore drift.
+# Service per module on the existing backend cluster. collector starts at
+# desired_count = 1 (it is scale-controlled by the app at runtime); the rest
+# start at 0 and are started manually. The app mutates collector's desiredCount
+# directly, so desired_count is in ignore_changes and Terraform never overwrites
+# it on subsequent applies. CI/CD rolls image/task-definition out of band, so
+# task_definition drift is ignored too.
 resource "aws_ecs_service" "lol" {
   for_each = local.lol_modules
 
   name            = each.value
   cluster         = aws_ecs_cluster.backend.id
   task_definition = aws_ecs_task_definition.lol[each.value].arn
-  desired_count   = 0
+  desired_count   = each.value == "rorr-lol-collector" ? 1 : 0
   launch_type     = "FARGATE"
 
   network_configuration {
