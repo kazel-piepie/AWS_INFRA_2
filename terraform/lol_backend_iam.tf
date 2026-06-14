@@ -188,7 +188,7 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
     sid       = "Topics"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.live_games, local.lol_topic_arns.raw]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "SelfScale"
@@ -239,7 +239,7 @@ data "aws_iam_policy_document" "rorr_lol_raw_store" {
     sid       = "TopicRaw"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.raw]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -282,13 +282,13 @@ data "aws_iam_policy_document" "rorr_lol_processor" {
     sid       = "TopicRawRead"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.raw]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "TopicProcessedWrite"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
-    resources = [local.lol_topic_arns.processed]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -328,7 +328,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_store" {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.processed]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -371,13 +371,13 @@ data "aws_iam_policy_document" "rorr_lol_contextualizer" {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.processed]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "TopicContextWrite"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
-    resources = [local.lol_topic_arns.context]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "BedrockInvoke"
@@ -426,7 +426,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_deliverer" {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.processed]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -469,7 +469,7 @@ data "aws_iam_policy_document" "rorr_lol_context_store" {
     sid       = "TopicContextRead"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.context]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
@@ -512,7 +512,7 @@ data "aws_iam_policy_document" "rorr_lol_context_deliverer" {
     sid       = "TopicContextRead"
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
-    resources = [local.lol_topic_arns.context]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
     sid       = "Logs"
