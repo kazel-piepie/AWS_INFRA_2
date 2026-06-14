@@ -18,7 +18,9 @@ locals {
   }
 
   # ECS service ARN of the self-scaling collector (UpdateService target).
-  lol_collector_service_arn = "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/rorr-lol-collector"
+  # References the dedicated aws_ecs_service.lol_collector resource (its id is
+  # the service ARN) instead of a hand-built ARN string.
+  lol_collector_service_arn = aws_ecs_service.lol_collector.id
 
   # Module service name -> task role object. Lets the ECS task definitions and
   # the OIDC deploy PassRole list reference the per-module roles by service name

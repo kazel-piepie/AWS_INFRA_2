@@ -7,7 +7,7 @@ output "lol_backend_ecr_repository_url" {
 
 output "lol_backend_service_names" {
   description = "ECS service names for the LOL backend pipeline modules"
-  value       = sort([for s in aws_ecs_service.lol : s.name])
+  value       = sort(concat([for s in aws_ecs_service.lol : s.name], [aws_ecs_service.lol_collector.name]))
 }
 
 output "lol_backend_deploy_role_arn" {

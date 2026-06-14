@@ -94,10 +94,12 @@ resource "aws_ecs_task_definition" "lol" {
 }
 
 # Service per module on the existing backend cluster. desired_count = 0 for the
-# initial deploy (collector is scale-controlled at runtime; the rest are started
-# manually). CI/CD rolls image/task-definition out of band, so ignore drift.
+# initial deploy (the rest are started manually). CI/CD rolls image/task-
+# definition out of band, so ignore drift. The collector is split into its own
+# resource (aws_ecs_service.lol_collector) because it self-scales desired_count
+# at runtime and needs desired_count = 1 + ignore_changes seeded separately.
 resource "aws_ecs_service" "lol" {
-  for_each = local.lol_modules
+  for_each = toset([for m in local.lol_modules : m if m != "rorr-lol-collector"])
 
   name            = each.value
   cluster         = aws_ecs_cluster.backend.id
@@ -117,6 +119,34 @@ resource "aws_ecs_service" "lol" {
 
   tags = {
     Name      = each.value
+    Component = "lol-backend"
+  }
+}
+
+# Collector self-scales its own ECS desiredCount from the leader task at runtime
+# (ecs:UpdateService). It is seeded at desired_count = 1 here, but Terraform must
+# never reset that count on subsequent applies - hence ignore_changes on
+# desired_count (and task_definition, which CI/CD rolls out of band like the
+# other modules). Same configuration as aws_ecs_service.lol otherwise.
+resource "aws_ecs_service" "lol_collector" {
+  name            = "rorr-lol-collector"
+  cluster         = aws_ecs_cluster.backend.id
+  task_definition = aws_ecs_task_definition.lol["rorr-lol-collector"].arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = aws_subnet.private[*].id
+    security_groups  = [aws_security_group.backend_ecs.id]
+    assign_public_ip = false
+  }
+
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
+  }
+
+  tags = {
+    Name      = "rorr-lol-collector"
     Component = "lol-backend"
   }
 }
