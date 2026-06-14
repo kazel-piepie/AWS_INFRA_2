@@ -27,6 +27,10 @@ locals {
   # MSK topic ARN prefix derived from the cluster ARN (cluster/ -> topic/), so
   # topic ARNs need no hardcoded cluster UUID.
   msk_topic_arn_prefix = replace(aws_msk_cluster.main.arn, ":cluster/", ":topic/")
+
+  # MSK consumer-group ARN prefix derived from the cluster ARN (cluster/ ->
+  # group/), so group ARNs need no hardcoded cluster UUID.
+  msk_group_arn_prefix = replace(aws_msk_cluster.main.arn, ":cluster/", ":group/")
 }
 
 # One log group per service: /ecs/rorr-lol-<module>.

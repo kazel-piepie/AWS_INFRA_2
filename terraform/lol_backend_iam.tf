@@ -197,6 +197,12 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
     resources = [local.lol_collector_service_arn]
   }
   statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "Logs"
     effect    = "Allow"
     actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
@@ -248,6 +254,12 @@ data "aws_iam_policy_document" "rorr_lol_raw_store" {
     resources = [local.lol_log_group_arns["rorr-lol-raw-store"]]
   }
   statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "EcsServicesSecret"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
@@ -297,6 +309,12 @@ data "aws_iam_policy_document" "rorr_lol_processor" {
     resources = [local.lol_log_group_arns["rorr-lol-processor"]]
   }
   statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "EcsServicesSecret"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
@@ -335,6 +353,12 @@ data "aws_iam_policy_document" "rorr_lol_processed_store" {
     effect    = "Allow"
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-processed-store"]]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
   }
   statement {
     sid       = "EcsServicesSecret"
@@ -392,6 +416,12 @@ data "aws_iam_policy_document" "rorr_lol_contextualizer" {
     resources = [local.lol_log_group_arns["rorr-lol-contextualizer"]]
   }
   statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "EcsServicesSecret"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
@@ -433,6 +463,12 @@ data "aws_iam_policy_document" "rorr_lol_processed_deliverer" {
     effect    = "Allow"
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-processed-deliverer"]]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
   }
   statement {
     sid       = "EcsServicesSecret"
@@ -478,6 +514,12 @@ data "aws_iam_policy_document" "rorr_lol_context_store" {
     resources = [local.lol_log_group_arns["rorr-lol-context-store"]]
   }
   statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
     sid       = "EcsServicesSecret"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
@@ -519,6 +561,12 @@ data "aws_iam_policy_document" "rorr_lol_context_deliverer" {
     effect    = "Allow"
     actions   = ["logs:*"]
     resources = [local.lol_log_group_arns["rorr-lol-context-deliverer"]]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
   }
   statement {
     sid       = "EcsServicesSecret"
