@@ -136,7 +136,7 @@ data "aws_iam_policy_document" "backend_ses_send" {
       "ses:SendRawEmail",
       "sesv2:SendEmail",
     ]
-    resources = ["arn:aws:ses:${local.region_id}:${local.account_id}:identity/rorr.club"]
+    resources = ["arn:aws:ses:${local.region_id}:${local.account_id}:identity/*"]
   }
 }
 
