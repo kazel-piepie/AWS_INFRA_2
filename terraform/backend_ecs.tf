@@ -126,7 +126,8 @@ resource "aws_iam_role_policy_attachment" "backend_task_secret" {
   policy_arn = aws_iam_policy.rorr_secret_read.arn
 }
 
-# Backend runtime sends transactional email via SES from the rorr.club identity.
+# Backend runtime sends transactional email via SES from any verified identity
+# (the rorr.club domain plus individually verified email addresses).
 data "aws_iam_policy_document" "backend_ses_send" {
   statement {
     sid    = "SendRorrClubEmail"
@@ -136,13 +137,13 @@ data "aws_iam_policy_document" "backend_ses_send" {
       "ses:SendRawEmail",
       "sesv2:SendEmail",
     ]
-    resources = ["arn:aws:ses:${local.region_id}:${local.account_id}:identity/rorr.club"]
+    resources = ["arn:aws:ses:${local.region_id}:${local.account_id}:identity/*"]
   }
 }
 
 resource "aws_iam_policy" "backend_ses_send" {
   name        = "${local.name_prefix}-backend-ses-send"
-  description = "Send email via SES from the rorr.club identity"
+  description = "Send email via SES from any verified identity"
   policy      = data.aws_iam_policy_document.backend_ses_send.json
 }
 
