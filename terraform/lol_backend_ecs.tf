@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# LOL backend pipeline: 8 Fargate services running on the EXISTING backend
+# LOL backend pipeline: 9 Fargate services running on the EXISTING backend
 # cluster (ai-rorr-develop-backend-cluster). No new cluster is created.
 # All are background workers/deliverers - no ALB, no inbound ports.
 # ---------------------------------------------------------------------------
@@ -14,6 +14,7 @@ locals {
     "rorr-lol-processed-deliverer",
     "rorr-lol-context-store",
     "rorr-lol-context-deliverer",
+    "rorr-lol-meta-collector",
   ])
 
   # Existing backend cluster - referenced, never recreated.
