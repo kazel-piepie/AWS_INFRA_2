@@ -32,6 +32,7 @@ locals {
     "rorr-lol-processed-deliverer" = aws_iam_role.rorr_lol_processed_deliverer_task_role
     "rorr-lol-context-store"       = aws_iam_role.rorr_lol_context_store_task_role
     "rorr-lol-context-deliverer"   = aws_iam_role.rorr_lol_context_deliverer_task_role
+    "rorr-lol-meta-collector"      = aws_iam_role.rorr_lol_meta_collector_task_role
   }
 }
 
@@ -164,6 +165,16 @@ resource "aws_iam_role" "rorr_lol_context_deliverer_task_role" {
 
   tags = {
     Name      = "rorr-lol-context-deliverer-task-role"
+    Component = "lol-backend"
+  }
+}
+
+resource "aws_iam_role" "rorr_lol_meta_collector_task_role" {
+  name               = "rorr-lol-meta-collector-task-role"
+  assume_role_policy = data.aws_iam_policy_document.backend_ecs_assume.json
+
+  tags = {
+    Name      = "rorr-lol-meta-collector-task-role"
     Component = "lol-backend"
   }
 }
@@ -589,4 +600,32 @@ resource "aws_iam_role_policy" "rorr_lol_context_deliverer_task_policy" {
   name   = "rorr-lol-context-deliverer-task-policy"
   role   = aws_iam_role.rorr_lol_context_deliverer_task_role.id
   policy = data.aws_iam_policy_document.rorr_lol_context_deliverer.json
+}
+
+# --- rorr-lol-meta-collector ------------------------------------------------
+# Meta collector pulls LoL meta from the Riot API and caches it in Redis,
+# persisting to the database. It does NOT use Kafka/MSK and does NOT call
+# Bedrock, so no kafka-cluster:* / bedrock:* grants. Reads the riot secret
+# (rorr/develop/riot) inline; database + redis come from ai/rorr/develop, which
+# is already granted to every module via the shared rorr_secret_read attachment
+# (aws_iam_role_policy_attachment.rorr_lol_task_secret).
+data "aws_iam_policy_document" "rorr_lol_meta_collector" {
+  statement {
+    sid       = "Logs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = [local.lol_log_group_arns["rorr-lol-meta-collector"]]
+  }
+  statement {
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_lol_riot.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "rorr_lol_meta_collector_task_policy" {
+  name   = "rorr-lol-meta-collector-task-policy"
+  role   = aws_iam_role.rorr_lol_meta_collector_task_role.id
+  policy = data.aws_iam_policy_document.rorr_lol_meta_collector.json
 }
