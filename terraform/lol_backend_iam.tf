@@ -622,7 +622,11 @@ data "aws_iam_policy_document" "rorr_lol_meta_collector" {
     actions = ["secretsmanager:GetSecretValue"]
     resources = [
       data.aws_secretsmanager_secret.rorr.arn,
+      data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn,
+      data.aws_secretsmanager_secret.rorr_lol_database.arn,
       data.aws_secretsmanager_secret.rorr_lol_riot.arn,
+      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
+      data.aws_secretsmanager_secret.rorr_lol_redis.arn,
     ]
   }
 }
