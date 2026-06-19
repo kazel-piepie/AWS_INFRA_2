@@ -162,6 +162,14 @@ locals {
       #       database is touched only if it already exists, so this is safe on
       #       re-attached data volumes and fresh instances alike.
       sudo -u postgres psql -c "ALTER ROLE ai WITH CREATEDB NOCREATEROLE NOSUPERUSER;"
+
+      # 6a-1b. Create the rorr_app application role if it does not yet exist.
+      #        rorr_app is a non-login role used by application services.
+      #        Idempotent: no-op if the role already exists.
+      if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='rorr_app'" | grep -q 1; then
+        sudo -u postgres psql -c "CREATE ROLE rorr_app NOLOGIN NOCREATEROLE NOSUPERUSER;"
+      fi
+
       for DB_NAME in ai test; do
         if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
           sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO ai;"
@@ -172,6 +180,9 @@ locals {
           sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ai;"
           sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ai;"
           sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO ai;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO rorr_app;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO rorr_app;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO rorr_app;"
         fi
       done
 
