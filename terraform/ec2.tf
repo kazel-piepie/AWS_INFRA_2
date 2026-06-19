@@ -175,7 +175,19 @@ locals {
         fi
       done
 
-      # 6a-2. Log the resulting ai role attributes so the grant can be verified
+      # 6a-2. Grant DEFAULT PRIVILEGES for rorr_app on rorr_datacenter and
+      #        rorr_service databases. rorr_app is a non-login role (created by
+      #        the bootstrap step that initialises the ai/test databases).
+      #        Idempotent: ALTER DEFAULT PRIVILEGES is a no-op when re-run.
+      for DB_NAME in rorr_datacenter rorr_service; do
+        if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO rorr_app;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO rorr_app;"
+          sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO rorr_app;"
+        fi
+      done
+
+      # 6a-3. Log the resulting ai role attributes so the grant can be verified
       #       from the cloud-init / bootstrap output after provisioning.
       sudo -u postgres psql -c "SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin, rolreplication, rolbypassrls, rolconnlimit FROM pg_roles WHERE rolname='ai';"
 
