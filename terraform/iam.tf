@@ -1,9 +1,6 @@
 # All EC2 components that need an instance role.
 locals {
-  ec2_role_components = toset(concat(
-    keys(local.app_components),
-    ["main_db", "kafka_ui"],
-  ))
+  ec2_role_components = toset(["main_db", "kafka_ui"])
 }
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -52,25 +49,6 @@ resource "aws_iam_policy" "rorr_secret_write" {
   policy      = data.aws_iam_policy_document.rorr_secret_write.json
 }
 
-# Bedrock invoke for LoL AI (Sonnet model inference).
-data "aws_iam_policy_document" "bedrock_invoke" {
-  statement {
-    sid    = "InvokeBedrock"
-    effect = "Allow"
-    actions = [
-      "bedrock:InvokeModel",
-      "bedrock:InvokeModelWithResponseStream",
-    ]
-    resources = ["*"]
-  }
-}
-
-resource "aws_iam_policy" "bedrock_invoke" {
-  name        = "${local.name_prefix}-bedrock-invoke"
-  description = "Invoke Bedrock models for LoL AI"
-  policy      = data.aws_iam_policy_document.bedrock_invoke.json
-}
-
 resource "aws_iam_role" "ec2" {
   for_each = local.ec2_role_components
 
@@ -95,12 +73,6 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
   for_each   = local.ec2_role_components
   role       = aws_iam_role.ec2[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-# Bedrock only for LoL AI.
-resource "aws_iam_role_policy_attachment" "bedrock" {
-  role       = aws_iam_role.ec2["lol_ai"].name
-  policy_arn = aws_iam_policy.bedrock_invoke.arn
 }
 
 # PutSecretValue only for main_db (writes db_host / db_password on bootstrap).

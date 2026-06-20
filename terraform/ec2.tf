@@ -2,18 +2,8 @@ locals {
   secret_name = data.aws_secretsmanager_secret.rorr.name
 
   # Component-specific cloud-init setup snippets.
-  docker_setup = <<-EOT
-    dnf -y install docker
-    systemctl enable --now docker
-  EOT
-
   component_setup = {
-    datacenter_collector   = local.docker_setup
-    lol_data_collector     = local.docker_setup
-    datacenter_live_events = local.docker_setup
-    lol_live_events        = local.docker_setup
-    lol_ai                 = local.docker_setup
-    kafka_ui               = <<-EOT
+    kafka_ui = <<-EOT
       dnf -y install docker
       systemctl enable --now docker
       MSK_BOOTSTRAP=$(grep '^RORR_MSK_BOOTSTRAP_SERVERS=' /etc/rorr/rorr.env | cut -d= -f2-)
@@ -211,40 +201,6 @@ locals {
       UPDATED_SECRET=$(echo "$CURRENT_SECRET" | jq --arg h "$PRIVATE_IP" --arg p "$DB_PASS" '.db_host = $h | .db_password = $p')
       aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager
     EOT
-  }
-}
-
-# Application tier instances (collectors, live events, LoL AI) in private subnets.
-resource "aws_instance" "app" {
-  for_each = local.app_components
-
-  ami                    = data.aws_ami.al2023.id
-  instance_type          = each.value.instance_type
-  subnet_id              = aws_subnet.private[0].id
-  vpc_security_group_ids = [aws_security_group.app.id]
-  iam_instance_profile   = aws_iam_instance_profile.ec2[each.key].name
-
-  user_data = templatefile("${path.module}/user_data/bootstrap.sh.tftpl", {
-    secret_name     = local.secret_name
-    region          = var.region
-    component_name  = each.key
-    component_setup = local.component_setup[each.key]
-  })
-
-  metadata_options {
-    http_tokens   = "required"
-    http_endpoint = "enabled"
-  }
-
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
-    encrypted   = true
-  }
-
-  tags = {
-    Name      = "${local.name_prefix}-${replace(each.key, "_", "-")}"
-    Component = each.key
   }
 }
 
