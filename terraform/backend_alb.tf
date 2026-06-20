@@ -2,13 +2,21 @@
 # HTTPS (443) only — no plain HTTP listener is served.
 resource "aws_security_group" "backend_alb" {
   name        = "${local.name_prefix}-backend-alb-sg"
-  description = "RORR backend ALB internet facing HTTPS only"
+  description = "RORR backend ALB internet facing HTTPS and datacenter port"
   vpc_id      = aws_vpc.main.id
 
   ingress {
     description = "HTTPS from anywhere"
     from_port   = 443
     to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Datacenter service HTTP"
+    from_port   = 444
+    to_port     = 444
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -92,5 +100,47 @@ resource "aws_lb_listener" "backend_https" {
 
   tags = {
     Name = "${local.name_prefix}-backend-https"
+  }
+}
+
+# Target group for the MCP datacenter Fargate service (port 444).
+resource "aws_lb_target_group" "datacenter" {
+  name        = "${local.name_prefix}-datacenter-tg"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    path                = "/health"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+
+  tags = {
+    Name      = "${local.name_prefix}-datacenter-tg"
+    Component = "datacenter"
+  }
+}
+
+# HTTP listener on port 444 for the MCP datacenter service.
+resource "aws_lb_listener" "datacenter_444" {
+  load_balancer_arn = aws_lb.backend.arn
+  port              = 444
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.datacenter.arn
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-datacenter-444"
   }
 }
