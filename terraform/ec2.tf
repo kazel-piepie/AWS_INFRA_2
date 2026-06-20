@@ -8,12 +8,7 @@ locals {
   EOT
 
   component_setup = {
-    datacenter_collector   = local.docker_setup
-    lol_data_collector     = local.docker_setup
-    datacenter_live_events = local.docker_setup
-    lol_live_events        = local.docker_setup
-    lol_ai                 = local.docker_setup
-    kafka_ui               = <<-EOT
+    kafka_ui = <<-EOT
       dnf -y install docker
       systemctl enable --now docker
       MSK_BOOTSTRAP=$(grep '^RORR_MSK_BOOTSTRAP_SERVERS=' /etc/rorr/rorr.env | cut -d= -f2-)
