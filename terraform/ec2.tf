@@ -17,7 +17,7 @@ locals {
         -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS="$MSK_BOOTSTRAP" \
         provectuslabs/kafka-ui:latest
     EOT
-    main_db                = <<-EOT
+    main_db  = <<-EOT
       # 1. TimescaleDB YUM repository
       cat > /etc/yum.repos.d/timescale_timescaledb.repo << 'REPOEOF'
       [timescale_timescaledb]
