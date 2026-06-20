@@ -2,48 +2,15 @@
 # Dedicated IAM user for the DataCenter CI/CD deploy pipeline.
 #
 # This user lets GitHub Actions (or any external CI/CD runner) build and push
-# the RORR develop Docker images and roll them out across the 8 LOL backend
-# Fargate services. Least privilege only.
-#
-# Referencing rule:
-#   * The ecs-services secret is created OUT OF BAND (MCP server prerequisite),
-#     so it is pulled in with a data source (never managed here).
-#   * The ECR repositories, ECS services and task/execution roles are all
-#     managed in THIS same Terraform state. They are therefore referenced
-#     directly (aws_ecr_repository.* / aws_ecs_service.* / aws_iam_role.*),
-#     exactly as the sibling backend CI/CD user does in backend_iam_cicd.tf.
-#     Direct references keep the ARNs in lock-step with the resources and avoid
-#     the refresh-ordering pitfalls of data-sourcing same-state resources. The
-#     "do not recreate these resources" intent is fully honoured.
+# the RORR develop Docker images. Least privilege only.
 # ---------------------------------------------------------------------------
 
 locals {
-  # The 8 LOL backend service ARNs (UpdateService / DescribeServices targets).
-  # Built from the cluster name + exact service names, mirroring the existing
-  # local.lol_collector_service_arn pattern in lol_backend_iam.tf.
-  datacenter_cicd_service_arns = [
-    for name in local.lol_modules :
-    "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/${name}"
-  ]
-
-  # Task definition ARNs (any revision) for the 8 services. RunTask is scoped to
-  # these. family == service name (see aws_ecs_task_definition.lol).
-  datacenter_cicd_task_definition_arns = [
-    for name in local.lol_modules :
-    "arn:aws:ecs:${local.region_id}:${local.account_id}:task-definition/${name}:*"
-  ]
-
   # All develop RORR ECR repositories the pipeline pushes/pulls.
   datacenter_cicd_ecr_repo_arns = [
     aws_ecr_repository.backend.arn,
     aws_ecr_repository.lol_backend.arn,
   ]
-
-  # Execution role + every per-module task role, for the iam:PassRole grant.
-  datacenter_cicd_passable_role_arns = concat(
-    [aws_iam_role.rorr_lol_execution_role.arn],
-    [for r in local.rorr_lol_task_roles : r.arn],
-  )
 }
 
 # Externally-created secret holding the LOL backend ECS service references.
@@ -126,101 +93,7 @@ resource "aws_iam_policy" "datacenter_cicd_ecr" {
 }
 
 # ---------------------------------------------------------------------------
-# Policy 3 - ECS: deploy and run tasks across the 8 LOL backend services.
-# ---------------------------------------------------------------------------
-data "aws_iam_policy_document" "datacenter_cicd_ecs" {
-  # Task definition lifecycle actions do not support resource-level
-  # permissions; they must be granted on "*".
-  statement {
-    sid    = "TaskDefinitions"
-    effect = "Allow"
-    actions = [
-      "ecs:RegisterTaskDefinition",
-      "ecs:DeregisterTaskDefinition",
-      "ecs:DescribeTaskDefinition",
-      "ecs:ListTaskDefinitions",
-    ]
-    resources = ["*"]
-  }
-
-  # Update / describe the 8 LOL backend services.
-  statement {
-    sid    = "DeployServices"
-    effect = "Allow"
-    actions = [
-      "ecs:UpdateService",
-      "ecs:DescribeServices",
-    ]
-    resources = local.datacenter_cicd_service_arns
-  }
-
-  # ListServices has no resource-level support; scope it to the backend cluster.
-  statement {
-    sid       = "ListServices"
-    effect    = "Allow"
-    actions   = ["ecs:ListServices"]
-    resources = ["*"]
-    condition {
-      test     = "ArnEquals"
-      variable = "ecs:cluster"
-      values   = [aws_ecs_cluster.backend.arn]
-    }
-  }
-
-  # Stop / list / describe tasks, scoped to the backend cluster via condition.
-  statement {
-    sid    = "TaskRuntime"
-    effect = "Allow"
-    actions = [
-      "ecs:StopTask",
-      "ecs:DescribeTasks",
-      "ecs:ListTasks",
-    ]
-    resources = ["*"]
-    condition {
-      test     = "ArnEquals"
-      variable = "ecs:cluster"
-      values   = [aws_ecs_cluster.backend.arn]
-    }
-  }
-
-  # Run a one-off task from any revision of the 8 task definitions, limited to
-  # the backend cluster.
-  statement {
-    sid       = "RunTask"
-    effect    = "Allow"
-    actions   = ["ecs:RunTask"]
-    resources = local.datacenter_cicd_task_definition_arns
-    condition {
-      test     = "ArnEquals"
-      variable = "ecs:cluster"
-      values   = [aws_ecs_cluster.backend.arn]
-    }
-  }
-
-  # PassRole limited to the shared execution role + the 8 per-module task roles,
-  # and only to the ECS tasks service.
-  statement {
-    sid       = "PassEcsRoles"
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
-    resources = local.datacenter_cicd_passable_role_arns
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PassedToService"
-      values   = ["ecs-tasks.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_policy" "datacenter_cicd_ecs" {
-  name        = "${local.name_prefix}-datacenter-cicd-ecs"
-  description = "Deploy and run tasks across the 8 LOL backend ECS services"
-  policy      = data.aws_iam_policy_document.datacenter_cicd_ecs.json
-}
-
-# ---------------------------------------------------------------------------
-# Policy 4 - CloudWatch Logs: create groups/streams and put events.
+# Policy 3 - CloudWatch Logs: create groups/streams and put events.
 # ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "datacenter_cicd_logs" {
   statement {
@@ -242,7 +115,7 @@ resource "aws_iam_policy" "datacenter_cicd_logs" {
 }
 
 # ---------------------------------------------------------------------------
-# Attach all four policies to the CI/CD user.
+# Attach policies to the CI/CD user.
 # ---------------------------------------------------------------------------
 resource "aws_iam_user_policy_attachment" "datacenter_cicd_secrets" {
   user       = aws_iam_user.datacenter_cicd.name
@@ -252,11 +125,6 @@ resource "aws_iam_user_policy_attachment" "datacenter_cicd_secrets" {
 resource "aws_iam_user_policy_attachment" "datacenter_cicd_ecr" {
   user       = aws_iam_user.datacenter_cicd.name
   policy_arn = aws_iam_policy.datacenter_cicd_ecr.arn
-}
-
-resource "aws_iam_user_policy_attachment" "datacenter_cicd_ecs" {
-  user       = aws_iam_user.datacenter_cicd.name
-  policy_arn = aws_iam_policy.datacenter_cicd_ecs.arn
 }
 
 resource "aws_iam_user_policy_attachment" "datacenter_cicd_logs" {

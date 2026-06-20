@@ -54,11 +54,8 @@ resource "aws_iam_role" "lol_deploy" {
   }
 }
 
-# Wildcard ARN matching every rorr-lol-* service on the existing cluster.
+# PassRole targets: the shared execution role + all module task roles.
 locals {
-  lol_service_arn_wildcard = "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/rorr-lol-*"
-
-  # PassRole targets: the shared execution role + all module task roles.
   lol_passrole_arns = concat(
     [aws_iam_role.rorr_lol_execution_role.arn],
     [for r in local.rorr_lol_task_roles : r.arn],
@@ -72,14 +69,6 @@ data "aws_iam_policy_document" "lol_deploy" {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [data.aws_secretsmanager_secret.rorr.arn]
-  }
-
-  # Roll the rorr-lol-* services.
-  statement {
-    sid       = "DeployLolServices"
-    effect    = "Allow"
-    actions   = ["ecs:DescribeServices", "ecs:UpdateService"]
-    resources = [local.lol_service_arn_wildcard]
   }
 
   # Register/Describe task definitions do not support resource-level scoping.

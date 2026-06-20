@@ -43,11 +43,6 @@ output "kafka_ui_private_ip" {
   value       = aws_instance.kafka_ui.private_ip
 }
 
-output "app_instance_ids" {
-  description = "Application tier EC2 instance ids by component"
-  value       = { for k, inst in aws_instance.app : k => inst.id }
-}
-
 output "rorr_secret_arn" {
   description = "ARN of the ai/rorr secret consumed by this stack"
   value       = data.aws_secretsmanager_secret.rorr.arn

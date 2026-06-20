@@ -1,6 +1,5 @@
 # ---------------------------------------------------------------------------
-# LOL backend pipeline: 9 Fargate services running on the EXISTING backend
-# cluster (ai-rorr-develop-backend-cluster). No new cluster is created.
+# LOL backend pipeline: 9 Fargate task definitions (no cluster managed here).
 # All are background workers/deliverers - no ALB, no inbound ports.
 # ---------------------------------------------------------------------------
 locals {
@@ -16,10 +15,6 @@ locals {
     "rorr-lol-context-deliverer",
     "rorr-lol-meta-collector",
   ])
-
-  # Existing backend cluster - referenced, never recreated.
-  lol_cluster_name = aws_ecs_cluster.backend.name
-  lol_cluster_arn  = aws_ecs_cluster.backend.arn
 
   # Container entrypoint module = service name without the "rorr-lol-" prefix
   # (e.g. rorr-lol-collector -> node dist/collector).
@@ -87,37 +82,6 @@ resource "aws_ecs_task_definition" "lol" {
       }
     }
   ])
-
-  tags = {
-    Name      = each.value
-    Component = "lol-backend"
-  }
-}
-
-# Service per module on the existing backend cluster. collector starts at
-# desired_count = 1 (it is scale-controlled by the app at runtime); the rest
-# start at 0 and are started manually. The app mutates collector's desiredCount
-# directly, so desired_count is in ignore_changes and Terraform never overwrites
-# it on subsequent applies. CI/CD rolls image/task-definition out of band, so
-# task_definition drift is ignored too.
-resource "aws_ecs_service" "lol" {
-  for_each = local.lol_modules
-
-  name            = each.value
-  cluster         = aws_ecs_cluster.backend.id
-  task_definition = aws_ecs_task_definition.lol[each.value].arn
-  desired_count   = each.value == "rorr-lol-collector" ? 1 : 0
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = aws_subnet.private[*].id
-    security_groups  = [aws_security_group.backend_ecs.id]
-    assign_public_ip = false
-  }
-
-  lifecycle {
-    ignore_changes = [task_definition, desired_count]
-  }
 
   tags = {
     Name      = each.value

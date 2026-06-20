@@ -2,6 +2,18 @@
 # LOL backend pipeline IAM: one shared execution role + one task role per
 # module (least privilege, scoped to the exact MSK cluster/topics it touches).
 # ---------------------------------------------------------------------------
+
+# Assume-role policy for ECS tasks (shared by execution role and all task roles).
+data "aws_iam_policy_document" "backend_ecs_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
 locals {
   # Helper: full MSK topic ARN for an IAM resource.
   lol_topic_arns = {
@@ -16,9 +28,6 @@ locals {
     for name in local.lol_modules :
     name => "arn:aws:logs:${local.region_id}:${local.account_id}:log-group:/ecs/${name}:*"
   }
-
-  # ECS service ARN of the self-scaling collector (UpdateService target).
-  lol_collector_service_arn = "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/rorr-lol-collector"
 
   # Module service name -> task role object. Lets the ECS task definitions and
   # the OIDC deploy PassRole list reference the per-module roles by service name
@@ -200,12 +209,6 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
     effect    = "Allow"
     actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:ReadData"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
-  }
-  statement {
-    sid       = "SelfScale"
-    effect    = "Allow"
-    actions   = ["ecs:UpdateService", "ecs:DescribeServices"]
-    resources = [local.lol_collector_service_arn]
   }
   statement {
     sid       = "ConsumerGroup"

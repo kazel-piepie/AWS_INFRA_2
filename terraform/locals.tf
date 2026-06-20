@@ -11,31 +11,16 @@ locals {
   # Per-environment EC2 instance types (x86 processors; t3a/m6a are AMD x86).
   ec2_instance_types = {
     develop = {
-      datacenter_collector   = "t3a.small"
-      lol_data_collector     = "t3a.small"
-      datacenter_live_events = "t3a.small"
-      lol_live_events        = "t3a.small"
-      lol_ai                 = "t3a.medium"
-      kafka_ui               = "t3a.small"
-      main_db                = "t3a.medium"
+      kafka_ui = "t3a.small"
+      main_db  = "t3a.medium"
     }
     staging = {
-      datacenter_collector   = "t3a.medium"
-      lol_data_collector     = "t3a.medium"
-      datacenter_live_events = "t3a.medium"
-      lol_live_events        = "t3a.medium"
-      lol_ai                 = "t3a.large"
-      kafka_ui               = "t3a.small"
-      main_db                = "t3a.large"
+      kafka_ui = "t3a.small"
+      main_db  = "t3a.large"
     }
     prod = {
-      datacenter_collector   = "t3a.large"
-      lol_data_collector     = "t3a.large"
-      datacenter_live_events = "m6a.large"
-      lol_live_events        = "m6a.large"
-      lol_ai                 = "m6a.large"
-      kafka_ui               = "t3a.medium"
-      main_db                = "m6a.xlarge"
+      kafka_ui = "t3a.medium"
+      main_db  = "m6a.xlarge"
     }
   }
 
@@ -85,13 +70,4 @@ locals {
   }
 
   specs = local.ec2_instance_types[var.env]
-
-  # Application EC2 components (collectors, live events, AI).
-  app_components = {
-    datacenter_collector   = { instance_type = local.specs.datacenter_collector, bedrock = false }
-    lol_data_collector     = { instance_type = local.specs.lol_data_collector, bedrock = false }
-    datacenter_live_events = { instance_type = local.specs.datacenter_live_events, bedrock = false }
-    lol_live_events        = { instance_type = local.specs.lol_live_events, bedrock = false }
-    lol_ai                 = { instance_type = local.specs.lol_ai, bedrock = true }
-  }
 }
