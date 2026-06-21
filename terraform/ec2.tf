@@ -49,15 +49,18 @@ locals {
       # 2b. Install TimescaleDB now that pg_config is discoverable.
       dnf -y install timescaledb-2-postgresql-16
 
-      # 2c. Make TimescaleDB libraries discoverable by the Amazon Linux native
-      # postgresql16 build. The el8 TimescaleDB RPMs install the loader and
-      # versioned libraries under /usr/lib64/timescaledb-*-pg16, not the native
-      # postgres library dir (/usr/lib64/pgsql). Without this, postgres cannot
-      # resolve the 'timescaledb' preload library and dies at startup with
-      # FATAL: could not access file "timescaledb". Symlink them in before start.
+      # 2c. Copy TimescaleDB .so files to EBS (/var/lib/pgsql/lib/) so they
+      #     survive instance replacement, then symlink into /usr/lib64/pgsql/.
+      #     dynamic_library_path (added in step 4) lets PostgreSQL find them
+      #     from EBS even before dnf runs on a replaced instance.
+      PG_EBS_LIBDIR=/var/lib/pgsql/lib
+      mkdir -p "$PG_EBS_LIBDIR"
+      chown postgres:postgres "$PG_EBS_LIBDIR"
+      cp -f /usr/lib64/timescaledb-loader-pg16/timescaledb.so "$PG_EBS_LIBDIR/"
+      for so in /usr/lib64/timescaledb-pg16/*.so; do cp -f "$so" "$PG_EBS_LIBDIR/"; done
       PG_LIBDIR=/usr/lib64/pgsql
-      ln -sf /usr/lib64/timescaledb-loader-pg16/timescaledb.so "$PG_LIBDIR/timescaledb.so"
-      for so in /usr/lib64/timescaledb-pg16/*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
+      ln -sf "$PG_EBS_LIBDIR/timescaledb.so" "$PG_LIBDIR/timescaledb.so"
+      for so in "$PG_EBS_LIBDIR"/timescaledb-*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
 
       # 3. Mount the dedicated EBS data volume at /var/lib/pgsql (the postgres
       #    home), NOT directly at the data directory. A fresh ext4 filesystem
@@ -114,6 +117,7 @@ locals {
         /usr/bin/postgresql-setup --initdb
         sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_DATA_DIR/postgresql.conf"
         echo "shared_preload_libraries = 'timescaledb'" >> "$PG_DATA_DIR/postgresql.conf"
+        echo "dynamic_library_path = '\$libdir:/var/lib/pgsql/lib'" >> "$PG_DATA_DIR/postgresql.conf"
         echo "host all all 0.0.0.0/0 md5" >> "$PG_DATA_DIR/pg_hba.conf"
         # Tune TimescaleDB before first start so settings take effect on boot.
         timescaledb-tune --quiet --yes --conf-path "$PG_DATA_DIR/postgresql.conf" || true
