@@ -126,7 +126,10 @@ locals {
 
       # 5. Start PostgreSQL
       systemctl enable --now postgresql
+    EOT
+  }
 
+  main_db_sql = <<-EOT
       # 6. Resolve the DB password from Secrets Manager so every (re)created
       #    instance uses the same credential. Generate one only if absent.
       SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
@@ -206,7 +209,6 @@ locals {
       UPDATED_SECRET=$(echo "$CURRENT_SECRET" | jq --arg h "$PRIVATE_IP" --arg p "$DB_PASS" '.db_host = $h | .db_password = $p')
       aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager
     EOT
-  }
 }
 
 # Application tier instances (collectors, live events, LoL AI) in private subnets.
@@ -254,8 +256,10 @@ resource "aws_instance" "main_db" {
   vpc_security_group_ids = [aws_security_group.db.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2["main_db"].name
 
-  # Force instance replacement when user_data changes so a new bootstrap runs.
-  user_data_replace_on_change = true
+  lifecycle {
+    ignore_changes  = [user_data]
+    prevent_destroy = true
+  }
 
   user_data = templatefile("${path.module}/user_data/bootstrap.sh.tftpl", {
     secret_name     = local.secret_name
