@@ -203,3 +203,4 @@ jobs:
             --region "${AWS_REGION}" \
             --secret-string "$UPDATED" \
             --no-cli-pager
+# trigger: sync secrets
