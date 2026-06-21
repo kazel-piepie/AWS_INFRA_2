@@ -94,6 +94,62 @@ jobs:
             --secret-string "$UPDATED" \
             --no-cli-pager
 
+      # Persist full infrastructure inventory into ai/rorr-infra/{env} so any
+      # service or operator can look up live resource identifiers without
+      # querying the AWS API directly.
+      - name: Update ai/rorr-infra secret with infra info
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          VPC_ID=$(terraform output -raw -no-color vpc_id)
+          PRIVATE_SUBNETS=$(terraform output -json -no-color private_subnet_ids)
+          PUBLIC_SUBNETS=$(terraform output -json -no-color public_subnet_ids)
+          MSK=$(terraform output -raw -no-color msk_bootstrap_brokers)
+          MSK_TLS=$(terraform output -raw -no-color msk_bootstrap_brokers_tls)
+          REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
+          REDIS_PORT=$(terraform output -raw -no-color redis_port)
+          MAIN_DB_IP=$(terraform output -raw -no-color main_db_private_ip)
+          MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
+          KAFKA_UI_IP=$(terraform output -raw -no-color kafka_ui_private_ip)
+          APP_INSTANCES=$(terraform output -json -no-color app_instance_ids)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg vpc        "$VPC_ID" \
+            --argjson priv   "$PRIVATE_SUBNETS" \
+            --argjson pub    "$PUBLIC_SUBNETS" \
+            --arg msk        "$MSK" \
+            --arg msk_tls    "$MSK_TLS" \
+            --arg redis_h    "$REDIS_HOST" \
+            --arg redis_p    "$REDIS_PORT" \
+            --arg db_ip      "$MAIN_DB_IP" \
+            --arg db_id      "$MAIN_DB_ID" \
+            --arg kafka_ip   "$KAFKA_UI_IP" \
+            --argjson apps   "$APP_INSTANCES" \
+            '.
+              vpc_id                   = $vpc |
+              private_subnet_ids       = $priv |
+              public_subnet_ids        = $pub |
+              msk_bootstrap_brokers    = $msk |
+              msk_bootstrap_brokers_tls = $msk_tls |
+              redis_host               = $redis_h |
+              redis_port               = $redis_p |
+              main_db_private_ip       = $db_ip |
+              main_db_instance_id      = $db_id |
+              kafka_ui_private_ip      = $kafka_ip |
+              app_instance_ids         = $apps
+            ')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
       # Persist the DataCenter CI/CD IAM user access key into the deploy-account
       # secret so external CI/CD runners can authenticate.
       - name: Store DataCenter CI/CD credentials in ai/service/account secret

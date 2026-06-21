@@ -48,6 +48,11 @@ output "app_instance_ids" {
   value       = { for k, inst in aws_instance.app : k => inst.id }
 }
 
+output "main_db_instance_id" {
+  description = "Main DB EC2 instance id"
+  value       = aws_instance.main_db.id
+}
+
 output "rorr_secret_arn" {
   description = "ARN of the ai/rorr secret consumed by this stack"
   value       = data.aws_secretsmanager_secret.rorr.arn
