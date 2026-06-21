@@ -221,6 +221,14 @@ locals {
       CURRENT_SECRET=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
       UPDATED_SECRET=$(echo "$CURRENT_SECRET" | jq --arg h "$PRIVATE_IP" --arg p "$DB_PASS" '.db_host = $h | .db_password = $p')
       aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager
+
+      # 8a. Sync DB password into rorr/${var.env}/database used by application services.
+      RORR_DB_SECRET_ID="rorr/${var.env}/database"
+      if aws secretsmanager describe-secret --secret-id "$RORR_DB_SECRET_ID" --region "${var.region}" --no-cli-pager > /dev/null 2>      aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager1; then
+        CURRENT_DB=$(aws secretsmanager get-secret-value --secret-id "$RORR_DB_SECRET_ID" --region "${var.region}" --query SecretString --output text --no-cli-pager)
+        UPDATED_DB=$(echo "$CURRENT_DB" | jq --arg p "$DB_PASS" '.password = $p')
+        aws secretsmanager put-secret-value --secret-id "$RORR_DB_SECRET_ID" --region "${var.region}" --secret-string "$UPDATED_DB" --no-cli-pager
+      fi
     EOT
 }
 
