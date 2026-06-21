@@ -62,20 +62,13 @@ locals {
       ln -sf "$PG_EBS_LIBDIR/timescaledb.so" "$PG_LIBDIR/timescaledb.so"
       for so in "$PG_EBS_LIBDIR"/timescaledb-*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
 
-      # 2d. Symlink .control and .sql extension files into AL2023 native share dir.
+      # 2d. Symlink .control and .sql into AL2023 native share dir.
+      #     el8 RPM installs these under /usr/lib64/timescaledb-*-pg16/.
       SHARE_DIR=/usr/share/pgsql/extension
       mkdir -p "$SHARE_DIR"
-      for ctrl in \
-        /usr/share/timescaledb/extension/*.control \
-        /usr/share/postgresql/16/extension/timescaledb*.control \
-        /usr/share/pgsql-16/extension/timescaledb*.control; do
-        [ -f "$ctrl" ] && ln -sf "$ctrl" "$SHARE_DIR/"
-      done
-      for sql in \
-        /usr/share/timescaledb/extension/timescaledb*.sql \
-        /usr/share/postgresql/16/extension/timescaledb*.sql \
-        /usr/share/pgsql-16/extension/timescaledb*.sql; do
-        [ -f "$sql" ] && ln -sf "$sql" "$SHARE_DIR/"
+      ln -sf /usr/lib64/timescaledb-loader-pg16/timescaledb.control "$SHARE_DIR/timescaledb.control"
+      for sql in /usr/lib64/timescaledb-pg16/timescaledb--*.sql; do
+        ln -sf "$sql" "$SHARE_DIR/"
       done
 
       # 3. Mount the dedicated EBS data volume at /var/lib/pgsql (the postgres
@@ -150,7 +143,7 @@ locals {
   }
 
   main_db_sql = <<-EOT
-      # 6. Resolve the DB password from Secrets Manager so every (re)created instance uses the same credential..
+      # 6. Resolve the DB password from Secrets Manager so every (re)created instance uses the same credential...
       #    Generate one only if absent.
       SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
       DB_PASS=$(echo "$SECRET_JSON" | jq -r '.db_password // empty')

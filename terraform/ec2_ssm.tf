@@ -1,6 +1,6 @@
 resource "null_resource" "main_db_timescaledb" {
   triggers = {
-    timescaledb_version = "2-postgresql-16-ctrl"
+    timescaledb_version = "2-postgresql-16-ctrl2"
   }
 
   provisioner "local-exec" {
@@ -38,7 +38,7 @@ PG_EBS_LIBDIR=/var/lib/pgsql/lib
 mkdir -p "$PG_EBS_LIBDIR"
 chown postgres:postgres "$PG_EBS_LIBDIR"
 
-# 5. Copy .so files to EBS (survives instance replacement)
+# 5. Copy .so files to EBS
 cp -f /usr/lib64/timescaledb-loader-pg16/timescaledb.so "$PG_EBS_LIBDIR/"
 for so in /usr/lib64/timescaledb-pg16/*.so; do cp -f "$so" "$PG_EBS_LIBDIR/"; done
 
@@ -47,25 +47,16 @@ PG_LIBDIR=/usr/lib64/pgsql
 ln -sf "$PG_EBS_LIBDIR/timescaledb.so" "$PG_LIBDIR/timescaledb.so"
 for so in "$PG_EBS_LIBDIR"/timescaledb-*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
 
-# 6b. Symlink .control and .sql extension files into the AL2023 native
-#     PostgreSQL extension share dir. el8 TimescaleDB RPMs install these
-#     under PGDG paths; AL2023 native postgres expects /usr/share/pgsql/extension/.
+# 6b. Symlink .control and .sql into AL2023 native share dir.
+#     el8 RPM installs these under /usr/lib64/timescaledb-*-pg16/, not /usr/share.
 SHARE_DIR=/usr/share/pgsql/extension
 mkdir -p "$SHARE_DIR"
-for ctrl in \
-  /usr/share/timescaledb/extension/*.control \
-  /usr/share/postgresql/16/extension/timescaledb*.control \
-  /usr/share/pgsql-16/extension/timescaledb*.control; do
-  [ -f "$ctrl" ] && ln -sf "$ctrl" "$SHARE_DIR/"
-done
-for sql in \
-  /usr/share/timescaledb/extension/timescaledb*.sql \
-  /usr/share/postgresql/16/extension/timescaledb*.sql \
-  /usr/share/pgsql-16/extension/timescaledb*.sql; do
-  [ -f "$sql" ] && ln -sf "$sql" "$SHARE_DIR/"
+ln -sf /usr/lib64/timescaledb-loader-pg16/timescaledb.control "$SHARE_DIR/timescaledb.control"
+for sql in /usr/lib64/timescaledb-pg16/timescaledb--*.sql; do
+  ln -sf "$sql" "$SHARE_DIR/"
 done
 
-# 7. postgresql.conf: shared_preload_libraries + dynamic_library_path (idempotent)
+# 7. postgresql.conf settings (idempotent)
 PG_CONF=/var/lib/pgsql/data/postgresql.conf
 if ! grep -q "shared_preload_libraries" "$PG_CONF"; then
   echo "shared_preload_libraries = 'timescaledb'" >> "$PG_CONF"
