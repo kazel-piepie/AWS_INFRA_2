@@ -221,6 +221,20 @@ locals {
       CURRENT_SECRET=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
       UPDATED_SECRET=$(echo "$CURRENT_SECRET" | jq --arg h "$PRIVATE_IP" --arg p "$DB_PASS" '.db_host = $h | .db_password = $p')
       aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager
+
+      # 8a. Update ai/rorr-infra/${var.env} with EC2 instance metadata.
+      INFRA_SECRET_ID="ai/rorr-infra/${var.env}"
+      INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+      AZ=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
+      if aws secretsmanager describe-secret --secret-id "$INFRA_SECRET_ID" --region "${var.region}" --no-cli-pager > /dev/null 2>&1; then
+        CURRENT_INFRA=$(aws secretsmanager get-secret-value --secret-id "$INFRA_SECRET_ID" --region "${var.region}" --query SecretString --output text --no-cli-pager)
+        UPDATED_INFRA=$(echo "$CURRENT_INFRA" | jq \
+          --arg id "$INSTANCE_ID" \
+          --arg ip "$PRIVATE_IP" \
+          --arg az "$AZ" \
+          '.db_instance_id = $id | .db_private_ip = $ip | .db_az = $az')
+        aws secretsmanager put-secret-value --secret-id "$INFRA_SECRET_ID" --region "${var.region}" --secret-string "$UPDATED_INFRA" --no-cli-pager
+      fi
     EOT
 }
 
