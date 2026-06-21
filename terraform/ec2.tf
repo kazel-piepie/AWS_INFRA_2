@@ -134,8 +134,8 @@ locals {
   }
 
   main_db_sql = <<-EOT
-      # 6. Resolve the DB password from Secrets Manager so every (re)created
-      #    instance uses the same credential. Generate one only if absent.
+      # 6. Resolve the DB password from Secrets Manager so every (re)created instance uses the same credential.
+      #    Generate one only if absent.
       SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
       DB_PASS=$(echo "$SECRET_JSON" | jq -r '.db_password // empty')
       if [ -z "$DB_PASS" ]; then
