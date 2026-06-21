@@ -221,6 +221,14 @@ locals {
       CURRENT_SECRET=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
       UPDATED_SECRET=$(echo "$CURRENT_SECRET" | jq --arg h "$PRIVATE_IP" --arg p "$DB_PASS" '.db_host = $h | .db_password = $p')
       aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager
+
+      # 8a. Also persist db_host and db_password to ai/rorr-infra/${var.env}.
+      INFRA_SECRET_ID="ai/rorr-infra/${var.env}"
+      if aws secretsmanager describe-secret --secret-id "$INFRA_SECRET_ID" --region "${var.region}" --no-cli-pager > /dev/null 2>&1; then
+        CURRENT_INFRA=$(aws secretsmanager get-secret-value --secret-id "$INFRA_SECRET_ID" --region "${var.region}" --query SecretString --output text --no-cli-pager)
+        UPDATED_INFRA=$(echo "$CURRENT_INFRA" | jq --arg h "$PRIVATE_IP" --arg p "$DB_PASS" '.db_host = $h | .db_password = $p')
+        aws secretsmanager put-secret-value --secret-id "$INFRA_SECRET_ID" --region "${var.region}" --secret-string "$UPDATED_INFRA" --no-cli-pager
+      fi
     EOT
 }
 
