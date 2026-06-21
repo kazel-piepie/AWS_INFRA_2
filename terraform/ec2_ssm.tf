@@ -1,6 +1,6 @@
 resource "null_resource" "main_db_timescaledb" {
   triggers = {
-    timescaledb_version = "2-postgresql-16"
+    timescaledb_version = "2-postgresql-16-ctrl"
   }
 
   provisioner "local-exec" {
@@ -46,6 +46,24 @@ for so in /usr/lib64/timescaledb-pg16/*.so; do cp -f "$so" "$PG_EBS_LIBDIR/"; do
 PG_LIBDIR=/usr/lib64/pgsql
 ln -sf "$PG_EBS_LIBDIR/timescaledb.so" "$PG_LIBDIR/timescaledb.so"
 for so in "$PG_EBS_LIBDIR"/timescaledb-*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
+
+# 6b. Symlink .control and .sql extension files into the AL2023 native
+#     PostgreSQL extension share dir. el8 TimescaleDB RPMs install these
+#     under PGDG paths; AL2023 native postgres expects /usr/share/pgsql/extension/.
+SHARE_DIR=/usr/share/pgsql/extension
+mkdir -p "$SHARE_DIR"
+for ctrl in \
+  /usr/share/timescaledb/extension/*.control \
+  /usr/share/postgresql/16/extension/timescaledb*.control \
+  /usr/share/pgsql-16/extension/timescaledb*.control; do
+  [ -f "$ctrl" ] && ln -sf "$ctrl" "$SHARE_DIR/"
+done
+for sql in \
+  /usr/share/timescaledb/extension/timescaledb*.sql \
+  /usr/share/postgresql/16/extension/timescaledb*.sql \
+  /usr/share/pgsql-16/extension/timescaledb*.sql; do
+  [ -f "$sql" ] && ln -sf "$sql" "$SHARE_DIR/"
+done
 
 # 7. postgresql.conf: shared_preload_libraries + dynamic_library_path (idempotent)
 PG_CONF=/var/lib/pgsql/data/postgresql.conf

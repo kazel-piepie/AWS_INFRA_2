@@ -62,6 +62,22 @@ locals {
       ln -sf "$PG_EBS_LIBDIR/timescaledb.so" "$PG_LIBDIR/timescaledb.so"
       for so in "$PG_EBS_LIBDIR"/timescaledb-*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
 
+      # 2d. Symlink .control and .sql extension files into AL2023 native share dir.
+      SHARE_DIR=/usr/share/pgsql/extension
+      mkdir -p "$SHARE_DIR"
+      for ctrl in \
+        /usr/share/timescaledb/extension/*.control \
+        /usr/share/postgresql/16/extension/timescaledb*.control \
+        /usr/share/pgsql-16/extension/timescaledb*.control; do
+        [ -f "$ctrl" ] && ln -sf "$ctrl" "$SHARE_DIR/"
+      done
+      for sql in \
+        /usr/share/timescaledb/extension/timescaledb*.sql \
+        /usr/share/postgresql/16/extension/timescaledb*.sql \
+        /usr/share/pgsql-16/extension/timescaledb*.sql; do
+        [ -f "$sql" ] && ln -sf "$sql" "$SHARE_DIR/"
+      done
+
       # 3. Mount the dedicated EBS data volume at /var/lib/pgsql (the postgres
       #    home), NOT directly at the data directory. A fresh ext4 filesystem
       #    contains a lost+found at its root; mounting it on the data dir would
@@ -134,7 +150,7 @@ locals {
   }
 
   main_db_sql = <<-EOT
-      # 6. Resolve the DB password from Secrets Manager so every (re)created instance uses the same credential.
+      # 6. Resolve the DB password from Secrets Manager so every (re)created instance uses the same credential..
       #    Generate one only if absent.
       SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
       DB_PASS=$(echo "$SECRET_JSON" | jq -r '.db_password // empty')
