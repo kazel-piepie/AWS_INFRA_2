@@ -236,12 +236,7 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr_lol_database.arn,
-      data.aws_secretsmanager_secret.rorr_lol_riot.arn,
-      data.aws_secretsmanager_secret.rorr_lol_redis.arn,
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -287,10 +282,7 @@ data "aws_iam_policy_document" "rorr_lol_raw_store" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr_lol_database.arn,
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -342,7 +334,7 @@ data "aws_iam_policy_document" "rorr_lol_processor" {
     sid       = "AppSecrets"
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = [data.aws_secretsmanager_secret.rorr_lol_kafka.arn]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -388,10 +380,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_store" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr_lol_database.arn,
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -449,10 +438,7 @@ data "aws_iam_policy_document" "rorr_lol_contextualizer" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr_lol_database.arn,
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -498,10 +484,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_deliverer" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-      data.aws_secretsmanager_secret.rorr_lol_redis.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -547,10 +530,7 @@ data "aws_iam_policy_document" "rorr_lol_context_store" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr_lol_database.arn,
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -596,10 +576,7 @@ data "aws_iam_policy_document" "rorr_lol_context_deliverer" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-      data.aws_secretsmanager_secret.rorr_lol_redis.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
@@ -627,14 +604,7 @@ data "aws_iam_policy_document" "rorr_lol_meta_collector" {
     sid     = "AppSecrets"
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      data.aws_secretsmanager_secret.rorr.arn,
-      data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn,
-      data.aws_secretsmanager_secret.rorr_lol_database.arn,
-      data.aws_secretsmanager_secret.rorr_lol_riot.arn,
-      data.aws_secretsmanager_secret.rorr_lol_kafka.arn,
-      data.aws_secretsmanager_secret.rorr_lol_redis.arn,
-    ]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
 
