@@ -20,6 +20,13 @@ locals {
   # ECS service ARN of the self-scaling collector (UpdateService target).
   lol_collector_service_arn = "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/rorr-lol-collector"
 
+  # All 9 LOL backend service ARNs — used by the collector SelfScale statement
+  # so it can scale any pipeline service, not just itself.
+  lol_all_service_arns = [
+    for name in local.lol_modules :
+    "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/${name}"
+  ]
+
   # Module service name -> task role object. Lets the ECS task definitions and
   # the OIDC deploy PassRole list reference the per-module roles by service name
   # without repeating the explicit resource addresses.
@@ -205,7 +212,7 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
     sid       = "SelfScale"
     effect    = "Allow"
     actions   = ["ecs:UpdateService", "ecs:DescribeServices"]
-    resources = [local.lol_collector_service_arn]
+    resources = local.lol_all_service_arns
   }
   statement {
     sid       = "ConsumerGroup"
