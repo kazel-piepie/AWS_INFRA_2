@@ -233,9 +233,9 @@ data "aws_iam_policy_document" "rorr_lol_collector" {
     resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
@@ -279,9 +279,9 @@ data "aws_iam_policy_document" "rorr_lol_raw_store" {
     resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
@@ -377,9 +377,9 @@ data "aws_iam_policy_document" "rorr_lol_processed_store" {
     resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
@@ -435,9 +435,9 @@ data "aws_iam_policy_document" "rorr_lol_contextualizer" {
     resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
@@ -481,9 +481,9 @@ data "aws_iam_policy_document" "rorr_lol_processed_deliverer" {
     resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
@@ -527,9 +527,9 @@ data "aws_iam_policy_document" "rorr_lol_context_store" {
     resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
@@ -573,9 +573,9 @@ data "aws_iam_policy_document" "rorr_lol_context_deliverer" {
     resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
@@ -601,9 +601,9 @@ data "aws_iam_policy_document" "rorr_lol_meta_collector" {
     resources = [local.lol_log_group_arns["rorr-lol-meta-collector"]]
   }
   statement {
-    sid     = "AppSecrets"
-    effect  = "Allow"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
   }
 }
