@@ -89,3 +89,44 @@ resource "aws_iam_instance_profile" "ec2" {
   name     = "${local.name_prefix}-${replace(each.key, "_", "-")}-profile"
   role     = aws_iam_role.ec2[each.key].name
 }
+
+# MSK IAM authentication for Kafka UI.
+# provectuslabs/kafka-ui connects to MSK with SASL/IAM and needs cluster
+# connect, topic read/write/describe, and consumer group alter permissions.
+data "aws_iam_policy_document" "kafka_ui_msk" {
+  statement {
+    sid    = "MSKClusterConnect"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:Connect",
+      "kafka-cluster:DescribeCluster",
+    ]
+    resources = [aws_msk_cluster.main.arn]
+  }
+
+  statement {
+    sid    = "MSKTopicAccess"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:DescribeTopic",
+      "kafka-cluster:ReadData",
+      "kafka-cluster:WriteData",
+    ]
+    resources = ["${replace(aws_msk_cluster.main.arn, ":cluster/", ":topic/")}/*"]
+  }
+
+  statement {
+    sid    = "MSKGroupAccess"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:AlterGroup",
+    ]
+    resources = ["${replace(aws_msk_cluster.main.arn, ":cluster/", ":group/")}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "kafka_ui_msk" {
+  name   = "${local.name_prefix}-kafka-ui-msk"
+  role   = aws_iam_role.ec2["kafka_ui"].id
+  policy = data.aws_iam_policy_document.kafka_ui_msk.json
+}
