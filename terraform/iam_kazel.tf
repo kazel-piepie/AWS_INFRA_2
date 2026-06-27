@@ -1,8 +1,8 @@
 # ---------------------------------------------------------------------------
-# Dedicated IAM user "kazel" for human DB access via SSM port forwarding only.
-# No direct DB credentials and no broad SSM access: kazel may open an SSM
-# StartSession port-forwarding tunnel to the main_db instance and manage only
-# its own sessions. Programmatic (AWS CLI) and console access are both enabled;
+# Dedicated IAM user "kazel" for human access to the Kafka UI instance via SSM.
+# No broad SSM access: kazel may open an SSM StartSession (interactive shell or
+# port-forwarding tunnel) to the kafka_ui instance and manage only its own
+# sessions. Programmatic (AWS CLI) and console access are both enabled;
 # the access key and console password are stored in Secrets Manager.
 # ---------------------------------------------------------------------------
 
@@ -36,9 +36,11 @@ resource "aws_iam_user_login_profile" "kazel" {
 }
 
 # ---------------------------------------------------------------------------
-# SSM port-forwarding-only policy.
-#   - StartSession: only the main_db instance, and only the two port-forwarding
-#     SSM documents.
+# SSM access policy for the kafka_ui instance.
+#   - StartPortForwardingSession: port-forwarding tunnel to kafka_ui using the
+#     two AWS port-forwarding documents.
+#   - StartInteractiveSession: interactive shell session to kafka_ui (no
+#     document restriction so aws ssm start-session works directly).
 #   - Terminate/Resume: only sessions owned by kazel (aws:username condition via
 #     the session resource ARN).
 # ---------------------------------------------------------------------------
@@ -48,9 +50,18 @@ data "aws_iam_policy_document" "kazel_ssm_port_forward" {
     effect  = "Allow"
     actions = ["ssm:StartSession"]
     resources = [
-      aws_instance.main_db.arn,
+      aws_instance.kafka_ui.arn,
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSession",
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSessionToRemoteHost",
+    ]
+  }
+
+  statement {
+    sid     = "StartInteractiveSession"
+    effect  = "Allow"
+    actions = ["ssm:StartSession"]
+    resources = [
+      aws_instance.kafka_ui.arn,
     ]
   }
 
