@@ -171,6 +171,14 @@ resource "aws_security_group" "msk" {
     security_groups = [aws_security_group.backend_ecs.id]
   }
 
+  ingress {
+    description     = "Kafka IAM auth from Kafka UI"
+    from_port       = 9098
+    to_port         = 9098
+    protocol        = "tcp"
+    security_groups = [aws_security_group.kafka_ui.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
