@@ -257,7 +257,7 @@ data "aws_iam_policy_document" "rorr_lol_raw_store" {
   statement {
     sid       = "TopicRaw"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
@@ -355,7 +355,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_store" {
   statement {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
@@ -459,7 +459,7 @@ data "aws_iam_policy_document" "rorr_lol_processed_deliverer" {
   statement {
     sid       = "TopicProcessedRead"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
@@ -505,7 +505,7 @@ data "aws_iam_policy_document" "rorr_lol_context_store" {
   statement {
     sid       = "TopicContextRead"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
@@ -551,7 +551,7 @@ data "aws_iam_policy_document" "rorr_lol_context_deliverer" {
   statement {
     sid       = "TopicContextRead"
     effect    = "Allow"
-    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
     resources = ["${local.msk_topic_arn_prefix}/*"]
   }
   statement {
@@ -588,12 +588,23 @@ resource "aws_iam_role_policy" "rorr_lol_context_deliverer_task_policy" {
 
 # --- rorr-lol-meta-collector ------------------------------------------------
 # Meta collector pulls LoL meta from the Riot API and caches it in Redis,
-# persisting to the database. It does NOT use Kafka/MSK and does NOT call
-# Bedrock, so no kafka-cluster:* / bedrock:* grants. Reads the riot secret
-# (rorr/develop/riot) and the rorr secret (ai/rorr/develop, holding database +
-# redis) inline. ai/rorr/develop is also granted to every module via the shared
-# rorr_secret_read attachment (aws_iam_role_policy_attachment.rorr_lol_task_secret).
+# persisting to the database. Reads the riot secret (rorr/develop/riot) and
+# the rorr secret (ai/rorr/develop, holding database + redis) inline.
+# ai/rorr/develop is also granted to every module via the shared rorr_secret_read
+# attachment (aws_iam_role_policy_attachment.rorr_lol_task_secret).
 data "aws_iam_policy_document" "rorr_lol_meta_collector" {
+  statement {
+    sid       = "MskConnect"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:CreateTopic"]
+    resources = [aws_msk_cluster.main.arn]
+  }
+  statement {
+    sid       = "TopicMetaWrite"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
   statement {
     sid       = "Logs"
     effect    = "Allow"
