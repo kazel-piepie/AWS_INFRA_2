@@ -27,7 +27,7 @@ resource "aws_msk_cluster" "main" {
 
     storage_info {
       ebs_storage_info {
-        volume_size = 20
+        volume_size = 1024
       }
     }
   }
