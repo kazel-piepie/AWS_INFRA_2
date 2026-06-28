@@ -76,6 +76,14 @@ resource "aws_security_group" "redis" {
     security_groups = [aws_security_group.backend_ecs.id]
   }
 
+  ingress {
+    description     = "Redis from Kafka UI for dev access"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.kafka_ui.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
