@@ -109,6 +109,7 @@ data "aws_iam_policy_document" "kafka_ui_msk" {
     effect = "Allow"
     actions = [
       "kafka-cluster:DescribeTopic",
+      "kafka-cluster:DescribeTopicDynamicConfiguration",
       "kafka-cluster:ReadData",
       "kafka-cluster:WriteData",
       "kafka-cluster:CreateTopic",
