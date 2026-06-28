@@ -76,6 +76,15 @@ resource "aws_security_group" "redis" {
     security_groups = [aws_security_group.backend_ecs.id]
   }
 
+  # Allow Redis access from kafka-ui EC2 used as SSM port-forwarding jump host for dev access.
+  ingress {
+    description     = "Redis from kafka-ui EC2 for SSM port forwarding"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.kafka_ui.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
