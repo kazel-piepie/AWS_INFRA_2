@@ -111,6 +111,10 @@ data "aws_iam_policy_document" "kafka_ui_msk" {
       "kafka-cluster:DescribeTopic",
       "kafka-cluster:ReadData",
       "kafka-cluster:WriteData",
+      "kafka-cluster:CreateTopic",
+      "kafka-cluster:DeleteTopic",
+      "kafka-cluster:AlterTopic",
+      "kafka-cluster:DeleteRecords",
     ]
     resources = ["${replace(aws_msk_cluster.main.arn, ":cluster/", ":topic/")}/*"]
   }
