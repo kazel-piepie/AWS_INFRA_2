@@ -137,6 +137,96 @@ data "aws_iam_policy_document" "backend_cicd" {
     ]
     resources = [aws_ecr_repository.backend.arn]
   }
+
+  # --- EC2: describe socket instances (DescribeInstances has no resource-level support). ---
+  statement {
+    sid    = "EC2DescribeSocketInstances"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeInstances",
+      "ec2:DescribeInstanceStatus",
+    ]
+    resources = ["*"]
+  }
+
+  # --- SSM Session Manager: open interactive sessions on socket EC2 instances only. ---
+  statement {
+    sid    = "SSMStartSessionOnSocket"
+    effect = "Allow"
+    actions = ["ssm:StartSession"]
+    resources = ["arn:aws:ec2:${local.region_id}:${local.account_id}:instance/*"]
+    condition {
+      test     = "StringLike"
+      variable = "ssm:resourceTag/Name"
+      values   = ["${local.name_prefix}-socket-*"]
+    }
+  }
+
+  # Default session document required by Session Manager.
+  statement {
+    sid    = "SSMStartSessionDocument"
+    effect = "Allow"
+    actions = ["ssm:StartSession"]
+    resources = [
+      "arn:aws:ssm:*:*:document/SSM-SessionManagerRunShell",
+      "arn:aws:ssm:*:*:document/AWS-StartSSHSession",
+    ]
+  }
+
+  # Terminate / resume only the caller's own sessions.
+  statement {
+    sid    = "SSMManageOwnSessions"
+    effect = "Allow"
+    actions = [
+      "ssm:TerminateSession",
+      "ssm:ResumeSession",
+    ]
+    resources = ["arn:aws:ssm:*:*:session/$${aws:username}-*"]
+  }
+
+  # Describe / health-check all sessions (read-only, no resource restriction).
+  statement {
+    sid    = "SSMDescribeSessions"
+    effect = "Allow"
+    actions = [
+      "ssm:DescribeSessions",
+      "ssm:GetConnectionStatus",
+    ]
+    resources = ["*"]
+  }
+
+  # --- SSM Run Command: execute programs on socket EC2 instances. ---
+  statement {
+    sid    = "SSMSendCommandToSocket"
+    effect = "Allow"
+    actions = ["ssm:SendCommand"]
+    resources = ["arn:aws:ec2:${local.region_id}:${local.account_id}:instance/*"]
+    condition {
+      test     = "StringLike"
+      variable = "ssm:resourceTag/Name"
+      values   = ["${local.name_prefix}-socket-*"]
+    }
+  }
+
+  # Allow the shell-script run document for SendCommand.
+  statement {
+    sid    = "SSMSendCommandDocument"
+    effect = "Allow"
+    actions = ["ssm:SendCommand"]
+    resources = ["arn:aws:ssm:*:*:document/AWS-RunShellScript"]
+  }
+
+  # Read command results and cancel in-flight commands.
+  statement {
+    sid    = "SSMCommandResults"
+    effect = "Allow"
+    actions = [
+      "ssm:GetCommandInvocation",
+      "ssm:ListCommandInvocations",
+      "ssm:CancelCommand",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_user_policy" "backend_cicd" {
