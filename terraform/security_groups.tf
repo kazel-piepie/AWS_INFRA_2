@@ -40,6 +40,14 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.backend_ecs.id]
   }
 
+  ingress {
+    description     = "PostgreSQL from socket EC2 instances"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.socket_ec2.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
@@ -83,6 +91,14 @@ resource "aws_security_group" "redis" {
     to_port         = 6379
     protocol        = "tcp"
     security_groups = [aws_security_group.kafka_ui.id]
+  }
+
+  ingress {
+    description     = "Redis from socket EC2 instances"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.socket_ec2.id]
   }
 
   egress {
@@ -198,5 +214,59 @@ resource "aws_security_group" "msk" {
 
   tags = {
     Name = "${local.name_prefix}-msk-sg"
+  }
+}
+
+# Socket server internet-facing ALB. HTTPS (443) inbound; all outbound.
+resource "aws_security_group" "socket_alb" {
+  name        = "${local.name_prefix}-socket-alb-sg"
+  description = "RORR socket server ALB internet facing HTTPS only"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-socket-alb-sg"
+  }
+}
+
+# Socket server EC2 instances. Inbound only from the socket ALB on port 5050.
+resource "aws_security_group" "socket_ec2" {
+  name        = "${local.name_prefix}-socket-ec2-sg"
+  description = "RORR socket server EC2 instances"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Socket traffic from socket ALB"
+    from_port       = 5050
+    to_port         = 5050
+    protocol        = "tcp"
+    security_groups = [aws_security_group.socket_alb.id]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-socket-ec2-sg"
   }
 }

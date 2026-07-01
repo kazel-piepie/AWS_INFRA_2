@@ -56,3 +56,38 @@ output "main_db_instance_id" {
   description = "Main DB EC2 instance id"
   value       = aws_instance.main_db.id
 }
+
+output "socket_1_instance_id" {
+  description = "Socket server node 1 EC2 instance id"
+  value       = aws_instance.socket_1.id
+}
+
+output "socket_1_private_ip" {
+  description = "Socket server node 1 private IP"
+  value       = aws_instance.socket_1.private_ip
+}
+
+output "socket_2_instance_id" {
+  description = "Socket server node 2 EC2 instance id"
+  value       = aws_instance.socket_2.id
+}
+
+output "socket_2_private_ip" {
+  description = "Socket server node 2 private IP"
+  value       = aws_instance.socket_2.private_ip
+}
+
+output "socket_alb_dns_name" {
+  description = "Socket ALB DNS name"
+  value       = aws_lb.socket.dns_name
+}
+
+output "socket_alb_arn" {
+  description = "Socket ALB ARN"
+  value       = aws_lb.socket.arn
+}
+
+output "socket_alb_zone_id" {
+  description = "Socket ALB hosted zone id (for Route 53 alias records)"
+  value       = aws_lb.socket.zone_id
+}
