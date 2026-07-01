@@ -338,6 +338,70 @@ resource "aws_volume_attachment" "main_db_data" {
   force_detach = true
 }
 
+# Socket server node 1 — us-east-1a private subnet.
+resource "aws_instance" "socket_1" {
+  ami                    = data.aws_ami.al2023.id
+  instance_type          = local.specs.socket
+  subnet_id              = aws_subnet.private[0].id
+  vpc_security_group_ids = [aws_security_group.socket_ec2.id]
+  iam_instance_profile   = aws_iam_instance_profile.socket.name
+
+  user_data = templatefile("${path.module}/user_data/bootstrap.sh.tftpl", {
+    secret_name     = local.secret_name
+    region          = var.region
+    component_name  = "socket_1"
+    component_setup = ""
+  })
+
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
+  }
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  tags = {
+    Name      = "${local.name_prefix}-socket-1"
+    Component = "socket_1"
+  }
+}
+
+# Socket server node 2 — us-east-1b private subnet.
+resource "aws_instance" "socket_2" {
+  ami                    = data.aws_ami.al2023.id
+  instance_type          = local.specs.socket
+  subnet_id              = aws_subnet.private[1].id
+  vpc_security_group_ids = [aws_security_group.socket_ec2.id]
+  iam_instance_profile   = aws_iam_instance_profile.socket.name
+
+  user_data = templatefile("${path.module}/user_data/bootstrap.sh.tftpl", {
+    secret_name     = local.secret_name
+    region          = var.region
+    component_name  = "socket_2"
+    component_setup = ""
+  })
+
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
+  }
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  tags = {
+    Name      = "${local.name_prefix}-socket-2"
+    Component = "socket_2"
+  }
+}
+
 # Kafka UI monitoring host in private subnet.
 resource "aws_instance" "kafka_ui" {
   ami                    = data.aws_ami.al2023.id

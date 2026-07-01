@@ -13,14 +13,17 @@ locals {
     develop = {
       kafka_ui = "t3a.small"
       main_db  = "t3a.medium"
+      socket   = "t3a.small"
     }
     staging = {
       kafka_ui = "t3a.small"
       main_db  = "t3a.large"
+      socket   = "t3a.medium"
     }
     prod = {
       kafka_ui = "t3a.medium"
       main_db  = "m6a.xlarge"
+      socket   = "m6a.large"
     }
   }
 
