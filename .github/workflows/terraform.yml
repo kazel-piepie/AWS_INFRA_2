@@ -127,13 +127,11 @@ jobs:
           PRIVATE_SUBNETS=$(terraform output -json -no-color private_subnet_ids)
           PUBLIC_SUBNETS=$(terraform output -json -no-color public_subnet_ids)
           MSK=$(terraform output -raw -no-color msk_bootstrap_brokers)
-          MSK_TLS=$(terraform output -raw -no-color msk_bootstrap_brokers_tls)
           REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
           REDIS_PORT=$(terraform output -raw -no-color redis_port)
           MAIN_DB_IP=$(terraform output -raw -no-color main_db_private_ip)
           MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
           KAFKA_UI_IP=$(terraform output -raw -no-color kafka_ui_private_ip)
-          APP_INSTANCES=$(terraform output -json -no-color app_instance_ids)
           SOCKET_1_ID=$(terraform output -raw -no-color socket_1_instance_id)
           SOCKET_1_IP=$(terraform output -raw -no-color socket_1_private_ip)
           SOCKET_2_ID=$(terraform output -raw -no-color socket_2_instance_id)
@@ -148,42 +146,43 @@ jobs:
             --query SecretString --output text --no-cli-pager)
 
           UPDATED=$(echo "$CURRENT" | jq \
-            --arg vpc           "$VPC_ID" \
-            --argjson priv      "$PRIVATE_SUBNETS" \
-            --argjson pub       "$PUBLIC_SUBNETS" \
-            --arg msk           "$MSK" \
-            --arg msk_tls       "$MSK_TLS" \
-            --arg redis_h       "$REDIS_HOST" \
-            --arg redis_p       "$REDIS_PORT" \
-            --arg db_ip         "$MAIN_DB_IP" \
-            --arg db_id         "$MAIN_DB_ID" \
-            --arg kafka_ip      "$KAFKA_UI_IP" \
-            --argjson apps      "$APP_INSTANCES" \
-            --arg s1_id         "$SOCKET_1_ID" \
-            --arg s1_ip         "$SOCKET_1_IP" \
-            --arg s2_id         "$SOCKET_2_ID" \
-            --arg s2_ip         "$SOCKET_2_IP" \
-            --arg alb_dns       "$SOCKET_ALB_DNS" \
-            --arg alb_arn       "$SOCKET_ALB_ARN" \
-            --arg alb_zone      "$SOCKET_ALB_ZONE" \
+            --arg vpc        "$VPC_ID" \
+            --argjson priv   "$PRIVATE_SUBNETS" \
+            --argjson pub    "$PUBLIC_SUBNETS" \
+            --arg msk_iam    "$MSK" \
+            --arg redis_h    "$REDIS_HOST" \
+            --arg redis_p    "$REDIS_PORT" \
+            --arg db_ip      "$MAIN_DB_IP" \
+            --arg db_id      "$MAIN_DB_ID" \
+            --arg kafka_ip   "$KAFKA_UI_IP" \
+            --arg s1_id      "$SOCKET_1_ID" \
+            --arg s1_ip      "$SOCKET_1_IP" \
+            --arg s2_id      "$SOCKET_2_ID" \
+            --arg s2_ip      "$SOCKET_2_IP" \
+            --arg alb_dns    "$SOCKET_ALB_DNS" \
+            --arg alb_arn    "$SOCKET_ALB_ARN" \
+            --arg alb_zone   "$SOCKET_ALB_ZONE" \
             '. + {
-              vpc_id:$vpc,
-              private_subnet_ids:$priv,
-              public_subnet_ids:$pub,
-              msk_bootstrap_brokers:$msk,
-              msk_bootstrap_brokers_tls:$msk_tls,
-              redis_host:$redis_h,
-              redis_port:$redis_p,
-              main_db_private_ip:$db_ip,
-              main_db_instance_id:$db_id,
-              kafka_ui_private_ip:$kafka_ip,
-              app_instance_ids:$apps,
-              ec2_instances: ((.ec2_instances // {}) + {
-                socket_1: {instance_id:$s1_id, private_ip:$s1_ip},
-                socket_2: {instance_id:$s2_id, private_ip:$s2_ip}
+              network: ((.network // {}) + {
+                vpc_id: $vpc,
+                private_subnet_ids: $priv,
+                public_subnet_ids: $pub
               }),
-              load_balancers: ((.load_balancers // {}) + {
-                socket: {dns_name:$alb_dns, arn:$alb_arn, zone_id:$alb_zone}
+              msk: ((.msk // {}) + {
+                bootstrap_brokers_iam: $msk_iam
+              }),
+              redis: ((.redis // {}) + {
+                endpoint: $redis_h,
+                port: ($redis_p | tonumber)
+              }),
+              ec2: ((.ec2 // {}) + {
+                main_db:  ((.ec2.main_db  // {}) + { instance_id: $db_id,   private_ip: $db_ip }),
+                kafka_ui: ((.ec2.kafka_ui // {}) + { private_ip: $kafka_ip }),
+                socket_1: ((.ec2.socket_1 // {}) + { instance_id: $s1_id,  private_ip: $s1_ip }),
+                socket_2: ((.ec2.socket_2 // {}) + { instance_id: $s2_id,  private_ip: $s2_ip })
+              }),
+              alb: ((.alb // {}) + {
+                socket: { dns: $alb_dns, arn: $alb_arn, zone_id: $alb_zone }
               })
             }')
 
