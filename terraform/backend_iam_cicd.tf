@@ -229,8 +229,14 @@ data "aws_iam_policy_document" "backend_cicd" {
   }
 }
 
-resource "aws_iam_user_policy" "backend_cicd" {
+# Customer Managed Policy (max 6144 bytes) instead of an inline user policy
+# (max 2048 bytes), which the SSM statements pushed over the limit.
+resource "aws_iam_policy" "backend_cicd" {
   name   = "${local.name_prefix}-backend-cicd-policy"
-  user   = aws_iam_user.backend_cicd.name
   policy = data.aws_iam_policy_document.backend_cicd.json
+}
+
+resource "aws_iam_user_policy_attachment" "backend_cicd" {
+  user       = aws_iam_user.backend_cicd.name
+  policy_arn = aws_iam_policy.backend_cicd.arn
 }
