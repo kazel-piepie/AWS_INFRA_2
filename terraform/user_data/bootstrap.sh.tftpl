@@ -3,7 +3,8 @@ set -euo pipefail
 
 # --- RORR base bootstrap (cloud-init) ---------------------------------------
 dnf -y update
-dnf -y install jq awscli
+dnf -y install jq awscli amazon-ssm-agent
+systemctl enable --now amazon-ssm-agent
 
 # Fetch the ai/rorr secret once and export each key as an environment variable
 # into /etc/rorr/rorr.env for the application to source.
