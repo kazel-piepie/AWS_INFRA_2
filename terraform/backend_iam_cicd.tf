@@ -151,9 +151,9 @@ data "aws_iam_policy_document" "backend_cicd" {
 
   # --- SSM Session Manager: open interactive sessions on socket EC2 instances only. ---
   statement {
-    sid    = "SSMStartSessionOnSocket"
-    effect = "Allow"
-    actions = ["ssm:StartSession"]
+    sid       = "SSMStartSessionOnSocket"
+    effect    = "Allow"
+    actions   = ["ssm:StartSession"]
     resources = ["arn:aws:ec2:${local.region_id}:${local.account_id}:instance/*"]
     condition {
       test     = "StringLike"
@@ -164,8 +164,8 @@ data "aws_iam_policy_document" "backend_cicd" {
 
   # Default session document required by Session Manager.
   statement {
-    sid    = "SSMStartSessionDocument"
-    effect = "Allow"
+    sid     = "SSMStartSessionDocument"
+    effect  = "Allow"
     actions = ["ssm:StartSession"]
     resources = [
       "arn:aws:ssm:*:*:document/SSM-SessionManagerRunShell",
@@ -197,9 +197,9 @@ data "aws_iam_policy_document" "backend_cicd" {
 
   # --- SSM Run Command: execute programs on socket EC2 instances. ---
   statement {
-    sid    = "SSMSendCommandToSocket"
-    effect = "Allow"
-    actions = ["ssm:SendCommand"]
+    sid       = "SSMSendCommandToSocket"
+    effect    = "Allow"
+    actions   = ["ssm:SendCommand"]
     resources = ["arn:aws:ec2:${local.region_id}:${local.account_id}:instance/*"]
     condition {
       test     = "StringLike"
@@ -210,9 +210,9 @@ data "aws_iam_policy_document" "backend_cicd" {
 
   # Allow the shell-script run document for SendCommand.
   statement {
-    sid    = "SSMSendCommandDocument"
-    effect = "Allow"
-    actions = ["ssm:SendCommand"]
+    sid       = "SSMSendCommandDocument"
+    effect    = "Allow"
+    actions   = ["ssm:SendCommand"]
     resources = ["arn:aws:ssm:*:*:document/AWS-RunShellScript"]
   }
 
