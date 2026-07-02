@@ -20,6 +20,12 @@ resource "aws_lb_target_group" "socket" {
   vpc_id      = aws_vpc.main.id
   target_type = "instance"
 
+  stickiness {
+    enabled         = true
+    type            = "lb_cookie"
+    cookie_duration = 86400
+  }
+
   health_check {
     enabled             = true
     path                = "/health"
