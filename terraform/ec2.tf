@@ -198,6 +198,11 @@ locals {
         echo "UUID=$DATA_UUID $NEO4J_MOUNT_DIR ext4 defaults,nofail 0 2" >> /etc/fstab
       fi
       mountpoint -q "$NEO4J_MOUNT_DIR" || mount "$NEO4J_MOUNT_DIR"
+      # Create the data subdirectory on the mounted volume before handing over
+      # ownership so the recursive chown covers it. Without this the empty volume
+      # has no data/ dir at chown time and Neo4j creates it as root:root on first
+      # start, leaving /var/lib/neo4j/data unwritable by the neo4j service.
+      mkdir -p "$NEO4J_MOUNT_DIR/data"
       chown -R neo4j:neo4j "$NEO4J_MOUNT_DIR"
 
       # 3c. If the databases directory already exists on a re-attached volume the
