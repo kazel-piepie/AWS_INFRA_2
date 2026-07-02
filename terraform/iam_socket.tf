@@ -35,3 +35,30 @@ resource "aws_iam_role_policy" "socket_secret_read" {
   role   = aws_iam_role.socket.id
   policy = data.aws_iam_policy_document.socket_secret_read.json
 }
+
+resource "aws_iam_role_policy" "socket_s3_deploy" {
+  name = "${local.name_prefix}-socket-s3-deploy"
+  role = aws_iam_role.socket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "DeployBucketList"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = ["arn:aws:s3:::${local.name_prefix}-deploy"]
+      },
+      {
+        Sid    = "DeployBucketObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+        ]
+        Resource = ["arn:aws:s3:::${local.name_prefix}-deploy/*"]
+      }
+    ]
+  })
+}
