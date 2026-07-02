@@ -2,7 +2,7 @@
 locals {
   ec2_role_components = toset(concat(
     keys(local.app_components),
-    ["main_db", "kafka_ui"],
+    ["main_db", "kafka_ui", "neo4j"],
   ))
 }
 
@@ -82,6 +82,38 @@ resource "aws_iam_role_policy_attachment" "ssm_core" {
 resource "aws_iam_role_policy_attachment" "secret_write" {
   role       = aws_iam_role.ec2["main_db"].name
   policy_arn = aws_iam_policy.rorr_secret_write.arn
+}
+
+# neo4j bootstrap also writes neo4j_uri / neo4j_user / neo4j_password into the
+# shared ai/rorr secret, so it needs the same PutSecretValue grant as main_db.
+resource "aws_iam_role_policy_attachment" "neo4j_secret_write" {
+  role       = aws_iam_role.ec2["neo4j"].name
+  policy_arn = aws_iam_policy.rorr_secret_write.arn
+}
+
+# Least-privilege write of only the dedicated rorr/{env}/neo4j secret. The
+# neo4j bootstrap persists the live uri/username/password into it.
+data "aws_iam_policy_document" "neo4j_secret_write" {
+  statement {
+    sid    = "WriteNeo4jSecret"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:DescribeSecret",
+    ]
+    resources = [aws_secretsmanager_secret.neo4j.arn]
+  }
+}
+
+resource "aws_iam_policy" "neo4j_secret_write" {
+  name        = "${local.name_prefix}-neo4j-secret-write"
+  description = "Write only the rorr neo4j secret for this environment"
+  policy      = data.aws_iam_policy_document.neo4j_secret_write.json
+}
+
+resource "aws_iam_role_policy_attachment" "neo4j_dedicated_secret_write" {
+  role       = aws_iam_role.ec2["neo4j"].name
+  policy_arn = aws_iam_policy.neo4j_secret_write.arn
 }
 
 resource "aws_iam_instance_profile" "ec2" {

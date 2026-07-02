@@ -61,6 +61,57 @@ resource "aws_security_group" "db" {
   }
 }
 
+# Neo4j graph database.
+resource "aws_security_group" "neo4j" {
+  name        = "${local.name_prefix}-neo4j-sg"
+  description = "RORR Neo4j graph database"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Bolt from application tier"
+    from_port       = 7687
+    to_port         = 7687
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app.id]
+  }
+
+  ingress {
+    description     = "Bolt from backend ECS tasks"
+    from_port       = 7687
+    to_port         = 7687
+    protocol        = "tcp"
+    security_groups = [aws_security_group.backend_ecs.id]
+  }
+
+  ingress {
+    description     = "Bolt from socket EC2 instances"
+    from_port       = 7687
+    to_port         = 7687
+    protocol        = "tcp"
+    security_groups = [aws_security_group.socket_ec2.id]
+  }
+
+  ingress {
+    description = "Neo4j HTTP browser from within VPC"
+    from_port   = 7474
+    to_port     = 7474
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-neo4j-sg"
+  }
+}
+
 # ElastiCache Redis.
 resource "aws_security_group" "redis" {
   name        = "${local.name_prefix}-redis-sg"
