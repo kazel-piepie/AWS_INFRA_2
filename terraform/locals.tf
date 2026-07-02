@@ -13,18 +13,29 @@ locals {
     develop = {
       kafka_ui = "t3a.small"
       main_db  = "t3a.medium"
+      neo4j    = "t3a.medium"
       socket   = "t3a.small"
     }
     staging = {
       kafka_ui = "t3a.small"
       main_db  = "t3a.large"
+      neo4j    = "t3a.large"
       socket   = "t3a.medium"
     }
     prod = {
       kafka_ui = "t3a.medium"
       main_db  = "m6a.xlarge"
+      neo4j    = "m6a.large"
       socket   = "m6a.large"
     }
+  }
+
+  # Neo4j dedicated data volume size (GiB) per environment. The graph database
+  # lives on this separate EBS volume so it survives neo4j instance replacement.
+  neo4j_data_volume_size = {
+    develop = 500
+    staging = 500
+    prod    = 500
   }
 
   # Main DB root volume size (GiB) per environment.

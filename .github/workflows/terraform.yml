@@ -75,6 +75,7 @@ jobs:
           REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
           REDIS_PORT=$(terraform output -raw -no-color redis_port)
           DB_HOST=$(terraform output -raw -no-color main_db_private_ip)
+          NEO4J_URI=$(terraform output -raw -no-color neo4j_uri)
 
           CURRENT=$(aws secretsmanager get-secret-value \
             --secret-id "ai/rorr/${ENV}" \
@@ -86,7 +87,8 @@ jobs:
             --arg rh "$REDIS_HOST" \
             --arg rp "$REDIS_PORT" \
             --arg dh "$DB_HOST" \
-            '.msk_bootstrap_servers=$msk | .redis_host=$rh | .redis_port=$rp | .db_host=$dh')
+            --arg n4j "$NEO4J_URI" \
+            '.msk_bootstrap_servers=$msk | .redis_host=$rh | .redis_port=$rp | .db_host=$dh | .neo4j_uri=$n4j')
 
           aws secretsmanager put-secret-value \
             --secret-id "ai/rorr/${ENV}" \
@@ -208,6 +210,26 @@ jobs:
 
           aws secretsmanager put-secret-value \
             --secret-id "rorr/${ENV}/database" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Update rorr/{env}/neo4j uri when the Neo4j instance IP changes.
+      - name: Update rorr neo4j secret with uri
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          NEO4J_URI=$(terraform output -raw -no-color neo4j_uri)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/neo4j" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq --arg u "$NEO4J_URI" '.uri = $u')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/neo4j" \
             --region "${AWS_REGION}" \
             --secret-string "$UPDATED" \
             --no-cli-pager

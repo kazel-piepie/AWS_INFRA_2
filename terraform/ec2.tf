@@ -144,6 +144,111 @@ locals {
       # 5. Start PostgreSQL
       systemctl enable --now postgresql
     EOT
+    neo4j    = <<-EOT
+      # 1. Neo4j 5 requires a Java 17 runtime; install the headless Corretto JDK.
+      dnf -y install java-17-amazon-corretto-headless
+
+      # 2. Neo4j 5 stable YUM repository.
+      rpm --import https://debian.neo4j.com/neotechnology.gpg.key
+      cat > /etc/yum.repos.d/neo4j.repo << 'REPOEOF'
+      [neo4j]
+      name=Neo4j RPM Repository
+      baseurl=https://yum.neo4j.com/stable/5
+      enabled=1
+      gpgcheck=1
+      REPOEOF
+      dnf -y install neo4j
+
+      # 3. Mount the dedicated EBS data volume at /var/lib/neo4j (the Neo4j data
+      #    home) so the graph database survives instance replacement. The volume
+      #    is attached as /dev/xvdf but surfaces as an NVMe device on Nitro
+      #    instances, so resolve the real device node before using it.
+      NEO4J_MOUNT_DIR=/var/lib/neo4j
+      DATA_DEV=""
+      for attempt in $(seq 1 30); do
+        for cand in /dev/xvdf /dev/sdf; do
+          if [ -b "$cand" ]; then DATA_DEV=$(readlink -f "$cand"); break; fi
+        done
+        if [ -z "$DATA_DEV" ]; then
+          for nvme in /dev/nvme*n1; do
+            [ -b "$nvme" ] || continue
+            if ebsnvme-id "$nvme" 2>/dev/null | grep -qE 'xvdf|sdf'; then DATA_DEV="$nvme"; break; fi
+          done
+        fi
+        [ -n "$DATA_DEV" ] && break
+        sleep 5
+      done
+      test -n "$DATA_DEV"
+
+      # 3a. Format only if the volume has no filesystem yet (preserve any data
+      #     already written by a previous instance). Track whether the volume is
+      #     fresh so the initial password is set only on first provisioning.
+      FRESH_VOLUME=0
+      if ! blkid "$DATA_DEV" >/dev/null 2>&1; then
+        mkfs.ext4 -L neo4jdata "$DATA_DEV"
+        FRESH_VOLUME=1
+      fi
+
+      # 3b. Mount the volume at $NEO4J_MOUNT_DIR and persist in fstab by UUID
+      #     (nofail so a missing volume does not block boot). Neo4j owns its data
+      #     home, so hand ownership to the neo4j service account after mounting.
+      mkdir -p "$NEO4J_MOUNT_DIR"
+      DATA_UUID=$(blkid -s UUID -o value "$DATA_DEV")
+      if ! grep -q "$DATA_UUID" /etc/fstab; then
+        echo "UUID=$DATA_UUID $NEO4J_MOUNT_DIR ext4 defaults,nofail 0 2" >> /etc/fstab
+      fi
+      mountpoint -q "$NEO4J_MOUNT_DIR" || mount "$NEO4J_MOUNT_DIR"
+      chown -R neo4j:neo4j "$NEO4J_MOUNT_DIR"
+
+      # 3c. If the databases directory already exists on a re-attached volume the
+      #     store is not fresh, so never reset the initial password in that case.
+      if [ -d "$NEO4J_MOUNT_DIR/data/databases" ]; then
+        FRESH_VOLUME=0
+      fi
+
+      # 4. Listen on all interfaces so clients within the VPC can reach Bolt/HTTP.
+      if ! grep -q '^server.default_listen_address=0.0.0.0' /etc/neo4j/neo4j.conf; then
+        echo 'server.default_listen_address=0.0.0.0' >> /etc/neo4j/neo4j.conf
+      fi
+
+      # 5. Resolve the Neo4j password from the ai/rorr secret so every (re)created
+      #    instance uses the same credential. Generate one only if absent.
+      SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
+      NEO4J_PASS=$(echo "$SECRET_JSON" | jq -r '.neo4j_password // empty')
+      if [ -z "$NEO4J_PASS" ]; then
+        NEO4J_PASS=$(openssl rand -hex 16)
+      fi
+
+      # 5a. Set the initial password only on a fresh volume (before first start);
+      #     neo4j-admin refuses once an auth store already exists.
+      if [ "$FRESH_VOLUME" = "1" ]; then
+        neo4j-admin dbms set-initial-password "$NEO4J_PASS"
+      fi
+
+      # 6. Start Neo4j.
+      systemctl enable --now neo4j
+
+      # 7. Get the instance private IP via IMDSv2.
+      IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+      PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+      NEO4J_URI="bolt://$PRIVATE_IP:7687"
+
+      # 8. Persist neo4j_uri / neo4j_user / neo4j_password back into ai/rorr/{env}.
+      CURRENT_SECRET=$(aws secretsmanager get-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --query SecretString --output text --no-cli-pager)
+      UPDATED_SECRET=$(echo "$CURRENT_SECRET" | jq --arg u "$NEO4J_URI" --arg n "neo4j" --arg p "$NEO4J_PASS" '.neo4j_uri = $u | .neo4j_user = $n | .neo4j_password = $p')
+      aws secretsmanager put-secret-value --secret-id "${local.secret_name}" --region "${var.region}" --secret-string "$UPDATED_SECRET" --no-cli-pager
+
+      # 8a. Sync uri / username / password into rorr/${var.env}/neo4j used by
+      #     application services (only if the dedicated secret already exists).
+      #     The secret holds only these three keys, all set here, so the value is
+      #     rebuilt directly — the instance role has PutSecretValue + DescribeSecret
+      #     on this secret but not GetSecretValue.
+      RORR_NEO4J_SECRET_ID="rorr/${var.env}/neo4j"
+      if aws secretsmanager describe-secret --secret-id "$RORR_NEO4J_SECRET_ID" --region "${var.region}" --no-cli-pager > /dev/null 2>&1; then
+        UPDATED_N4J=$(jq -n --arg u "$NEO4J_URI" --arg n "neo4j" --arg p "$NEO4J_PASS" '{uri: $u, username: $n, password: $p}')
+        aws secretsmanager put-secret-value --secret-id "$RORR_NEO4J_SECRET_ID" --region "${var.region}" --secret-string "$UPDATED_N4J" --no-cli-pager
+      fi
+    EOT
   }
 
   main_db_sql = <<-EOT
@@ -335,6 +440,73 @@ resource "aws_volume_attachment" "main_db_data" {
   device_name  = "/dev/xvdf"
   volume_id    = aws_ebs_volume.main_db_data.id
   instance_id  = aws_instance.main_db.id
+  force_detach = true
+}
+
+# Neo4j graph database in private subnet.
+# AMI is pinned to the same AL2023 build as main_db to prevent unintended
+# instance replacement when Amazon releases a new image.
+resource "aws_instance" "neo4j" {
+  ami                    = "ami-0521cb2d60cfbb1a6"
+  instance_type          = local.specs.neo4j
+  subnet_id              = aws_subnet.private[0].id
+  vpc_security_group_ids = [aws_security_group.neo4j.id]
+  iam_instance_profile   = aws_iam_instance_profile.ec2["neo4j"].name
+
+  lifecycle {
+    ignore_changes  = [user_data]
+    prevent_destroy = true
+  }
+
+  user_data = templatefile("${path.module}/user_data/bootstrap.sh.tftpl", {
+    secret_name     = local.secret_name
+    region          = var.region
+    component_name  = "neo4j"
+    component_setup = local.component_setup["neo4j"]
+  })
+
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
+  }
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  tags = {
+    Name      = "${local.name_prefix}-neo4j"
+    Component = "neo4j"
+  }
+}
+
+# Dedicated EBS data volume for Neo4j, separate from the root volume so the
+# graph database survives neo4j instance replacement.
+# prevent_destroy guards the data against accidental terraform destroy/replace.
+resource "aws_ebs_volume" "neo4j_data" {
+  availability_zone = aws_subnet.private[0].availability_zone
+  size              = local.neo4j_data_volume_size[var.env]
+  type              = "gp3"
+  encrypted         = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Name      = "${local.name_prefix}-neo4j-data"
+    Component = "neo4j"
+  }
+}
+
+# Attach the data volume to neo4j. force_detach lets a replaced instance
+# release the volume cleanly so the new instance can re-attach and re-mount it.
+resource "aws_volume_attachment" "neo4j_data" {
+  device_name  = "/dev/xvdf"
+  volume_id    = aws_ebs_volume.neo4j_data.id
+  instance_id  = aws_instance.neo4j.id
   force_detach = true
 }
 

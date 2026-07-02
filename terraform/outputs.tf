@@ -91,3 +91,23 @@ output "socket_alb_zone_id" {
   description = "Socket ALB hosted zone id (for Route 53 alias records)"
   value       = aws_lb.socket.zone_id
 }
+
+output "neo4j_private_ip" {
+  description = "Neo4j private IP"
+  value       = aws_instance.neo4j.private_ip
+}
+
+output "neo4j_instance_id" {
+  description = "Neo4j EC2 instance id"
+  value       = aws_instance.neo4j.id
+}
+
+output "neo4j_uri" {
+  description = "Neo4j Bolt connection URI"
+  value       = "bolt://${aws_instance.neo4j.private_ip}:7687"
+}
+
+output "neo4j_secret_arn" {
+  description = "ARN of the dedicated rorr neo4j secret"
+  value       = aws_secretsmanager_secret.neo4j.arn
+}
