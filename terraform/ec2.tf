@@ -253,6 +253,21 @@ locals {
         UPDATED_N4J=$(jq -n --arg u "$NEO4J_URI" --arg n "neo4j" --arg p "$NEO4J_PASS" '{uri: $u, username: $n, password: $p}')
         aws secretsmanager put-secret-value --secret-id "$RORR_NEO4J_SECRET_ID" --region "${var.region}" --secret-string "$UPDATED_N4J" --no-cli-pager
       fi
+
+      # neo4j-browser (idempotent: skip if already installed)
+      if ! ls /var/lib/neo4j/lib/neo4j-browser-*.jar 1>/dev/null 2>&1; then
+        NEO4J_BROWSER_VER="5.24.0"
+        NEO4J_BROWSER_JAR="neo4j-browser-$${NEO4J_BROWSER_VER}.jar"
+        NEO4J_BROWSER_URL="https://repo1.maven.org/maven2/org/neo4j/client/neo4j-browser/$${NEO4J_BROWSER_VER}/$${NEO4J_BROWSER_JAR}"
+        NEO4J_BROWSER_SHA1="3f725d9f8c32c7cc7cb3b8d29fd92151430965c6"
+        curl -fsSL "$NEO4J_BROWSER_URL" -o "/var/lib/neo4j/lib/$${NEO4J_BROWSER_JAR}"
+        echo "$${NEO4J_BROWSER_SHA1}  /var/lib/neo4j/lib/$${NEO4J_BROWSER_JAR}" | sha1sum -c -
+        chown neo4j:neo4j "/var/lib/neo4j/lib/$${NEO4J_BROWSER_JAR}"
+        systemctl restart neo4j
+        echo "neo4j-browser $${NEO4J_BROWSER_VER} installed"
+      else
+        echo "neo4j-browser already installed, skipping"
+      fi
     EOT
   }
 
