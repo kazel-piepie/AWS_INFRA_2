@@ -253,6 +253,65 @@ locals {
         UPDATED_N4J=$(jq -n --arg u "$NEO4J_URI" --arg n "neo4j" --arg p "$NEO4J_PASS" '{uri: $u, username: $n, password: $p}')
         aws secretsmanager put-secret-value --secret-id "$RORR_NEO4J_SECRET_ID" --region "${var.region}" --secret-string "$UPDATED_N4J" --no-cli-pager
       fi
+
+      # 9. Install the Neo4j Browser web UI jar (idempotent). This whole block is
+      #    a no-op on re-runs (reboot, instance replacement onto a re-attached
+      #    volume) so it is safe to execute on every boot.
+      NEO4J_LIB_DIR=/var/lib/neo4j/lib
+      if ls "$NEO4J_LIB_DIR"/neo4j-browser-*.jar >/dev/null 2>&1; then
+        # 9a. A browser jar is already installed -> skip download and restart.
+        echo "neo4j-browser jar already present in $NEO4J_LIB_DIR; skipping install"
+      else
+        BROWSER_BASE="https://repo1.maven.org/maven2/org/neo4j/client/neo4j-browser"
+
+        # 9b. Resolve the latest Neo4j 5.x browser release from Maven Central
+        #     metadata. Match only stable X.Y.Z 5.x versions (no -M/-RC/-alpha
+        #     qualifiers) and pick the highest by numeric version sort.
+        BROWSER_VERSION=$(curl -fsSL "$BROWSER_BASE/maven-metadata.xml" \
+          | grep -oE '<version>5\.[0-9]+\.[0-9]+</version>' \
+          | sed -E 's|</?version>||g' \
+          | sort -t. -k1,1n -k2,2n -k3,3n \
+          | tail -n1)
+        test -n "$BROWSER_VERSION"
+
+        BROWSER_JAR="neo4j-browser-$BROWSER_VERSION.jar"
+        BROWSER_URL="$BROWSER_BASE/$BROWSER_VERSION/$BROWSER_JAR"
+        TMP_JAR=$(mktemp)
+
+        # 9c. Download the jar, then verify its integrity fail-closed. Maven
+        #     Central publishes .sha1/.md5 for this artifact but not .sha256
+        #     (that path 404s), so prefer a published .sha256 when present and
+        #     otherwise fall back to the always-present .sha1. Either way a
+        #     mismatch aborts the boot before the jar is installed. The SHA-256
+        #     of the verified jar is always logged for audit.
+        curl -fsSL "$BROWSER_URL" -o "$TMP_JAR"
+        if EXPECTED_SHA256=$(curl -fsSL "$BROWSER_URL.sha256" 2>/dev/null | tr -d '[:space:]') && [ -n "$EXPECTED_SHA256" ]; then
+          ACTUAL_SHA256=$(sha256sum "$TMP_JAR" | awk '{print $1}')
+          if [ "$EXPECTED_SHA256" != "$ACTUAL_SHA256" ]; then
+            echo "neo4j-browser SHA256 mismatch: expected $EXPECTED_SHA256 got $ACTUAL_SHA256" >&2
+            rm -f "$TMP_JAR"
+            exit 1
+          fi
+        else
+          EXPECTED_SHA1=$(curl -fsSL "$BROWSER_URL.sha1" | tr -d '[:space:]')
+          ACTUAL_SHA1=$(sha1sum "$TMP_JAR" | awk '{print $1}')
+          if [ "$EXPECTED_SHA1" != "$ACTUAL_SHA1" ]; then
+            echo "neo4j-browser SHA1 mismatch: expected $EXPECTED_SHA1 got $ACTUAL_SHA1" >&2
+            rm -f "$TMP_JAR"
+            exit 1
+          fi
+        fi
+        echo "neo4j-browser $BROWSER_VERSION verified; sha256=$(sha256sum "$TMP_JAR" | awk '{print $1}')"
+
+        # 9d. Install atomically into the Neo4j lib dir with neo4j:neo4j
+        #     ownership, then restart so the browser jar is picked up.
+        mkdir -p "$NEO4J_LIB_DIR"
+        chown neo4j:neo4j "$NEO4J_LIB_DIR"
+        install -o neo4j -g neo4j -m 0644 "$TMP_JAR" "$NEO4J_LIB_DIR/$BROWSER_JAR"
+        rm -f "$TMP_JAR"
+
+        systemctl restart neo4j
+      fi
     EOT
   }
 
