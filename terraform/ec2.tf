@@ -159,6 +159,28 @@ locals {
       REPOEOF
       dnf -y install neo4j
 
+      # 2b. Neo4j 5.26 Community (RPM) does not bundle Neo4j Browser, so the
+      #     http://<host>:7474/browser/ endpoint returns 404. Install the browser
+      #     web app so it survives instance replacement: prefer the neo4j-browser
+      #     RPM if the repo ever ships one, otherwise fetch the pinned browser jar
+      #     from Maven Central and drop it on the server classpath
+      #     (/usr/share/neo4j/lib, on the root volume — not the mounted data
+      #     volume). Neo4j Browser ships on its own version line; 5.24.0 is the
+      #     release bundled with the Neo4j 5.26 LTS server. Idempotent: skip the
+      #     download if the jar is already present on a re-provisioned root disk.
+      NEO4J_BROWSER_VERSION=5.24.0
+      NEO4J_LIB_DIR=/usr/share/neo4j/lib
+      BROWSER_JAR="$NEO4J_LIB_DIR/neo4j-browser-$NEO4J_BROWSER_VERSION.jar"
+      if dnf list available neo4j-browser >/dev/null 2>&1; then
+        dnf -y install neo4j-browser
+      elif [ ! -f "$BROWSER_JAR" ]; then
+        BROWSER_URL="https://repo1.maven.org/maven2/org/neo4j/client/neo4j-browser/$NEO4J_BROWSER_VERSION/neo4j-browser-$NEO4J_BROWSER_VERSION.jar"
+        curl -fSL -o "$BROWSER_JAR.tmp" "$BROWSER_URL"
+        mv "$BROWSER_JAR.tmp" "$BROWSER_JAR"
+        chown neo4j:neo4j "$BROWSER_JAR"
+        chmod 644 "$BROWSER_JAR"
+      fi
+
       # 3. Mount the dedicated EBS data volume at /var/lib/neo4j (the Neo4j data
       #    home) so the graph database survives instance replacement. The volume
       #    is attached as /dev/xvdf but surfaces as an NVMe device on Nitro
