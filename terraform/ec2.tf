@@ -157,7 +157,21 @@ locals {
       enabled=1
       gpgcheck=1
       REPOEOF
+      # Neo4j 5.x Community bundles Neo4j Browser inside the server package: it
+      # is served at http://<host>:7474/browser/ from
+      # /usr/share/neo4j/lib/neo4j-browser-*.jar. There is no separate
+      # neo4j-browser package in the Neo4j YUM repo (only neo4j and
+      # neo4j-enterprise), so installing the server installs the browser.
       dnf -y install neo4j
+
+      # 2a. Ensure the bundled Neo4j Browser assets are present. Fail fast if a
+      #     future package layout ever drops them, rather than silently shipping
+      #     a server with no browser UI. (No jar download is required or correct
+      #     here: the classpath is /usr/share/neo4j/lib, not the data home.)
+      if ! ls /usr/share/neo4j/lib/neo4j-browser-*.jar >/dev/null 2>&1; then
+        echo "ERROR: Neo4j Browser jar missing from /usr/share/neo4j/lib after install" >&2
+        exit 1
+      fi
 
       # 3. Mount the dedicated EBS data volume at /var/lib/neo4j (the Neo4j data
       #    home) so the graph database survives instance replacement. The volume
@@ -232,6 +246,18 @@ locals {
 
       # 6. Start Neo4j.
       systemctl enable --now neo4j
+
+      # 6a. Best-effort confirmation that the Neo4j Browser HTTP endpoint is
+      #     serving after start. Logged only (does not abort provisioning) since
+      #     the jar-presence check above already guarantees the browser is
+      #     installed and the HTTP listener may still be warming up.
+      BROWSER_CODE=000
+      for attempt in $(seq 1 30); do
+        BROWSER_CODE=$(curl -s -o /dev/null -w "%%{http_code}" http://localhost:7474/browser/ || echo 000)
+        [ "$BROWSER_CODE" = "200" ] && break
+        sleep 5
+      done
+      echo "neo4j-browser endpoint http://localhost:7474/browser/ returned $BROWSER_CODE"
 
       # 7. Get the instance private IP via IMDSv2.
       IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
