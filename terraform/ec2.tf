@@ -159,6 +159,34 @@ locals {
       REPOEOF
       dnf -y install neo4j
 
+      # 2b. Ensure Neo4j Browser is served at http://<host>:7474/browser/ on every
+      #     (re)created instance. The neo4j RPM DOES bundle the browser, but it
+      #     ships it under /var/lib/neo4j/web/neo4j-browser-*.zip -- and step 3
+      #     mounts the dedicated EBS data volume at /var/lib/neo4j, which shadows
+      #     that RPM-provided web/ directory. So on a fresh instance the bundled
+      #     browser is hidden and /browser/ returns 404. There is also no separate
+      #     neo4j-browser dnf package (the repo ships only neo4j and
+      #     neo4j-enterprise). The fix is to place the Neo4j Browser web app on the
+      #     server classpath at /usr/share/neo4j/lib -- this lives on the root
+      #     volume, is never shadowed by the /var/lib/neo4j mount, and Neo4j serves
+      #     /browser/ from it. 5.24.0 is the latest neo4j-browser artifact on Maven
+      #     Central and the build that pairs with the Neo4j 5.26 LTS server.
+      #     Idempotent and checksum-verified: an unchanged root disk skips the
+      #     download, and a corrupt/wrong download fails the bootstrap loudly
+      #     instead of shipping a broken browser.
+      NEO4J_BROWSER_VERSION=5.24.0
+      NEO4J_BROWSER_SHA1=3f725d9f8c32c7cc7cb3b8d29fd92151430965c6
+      NEO4J_LIB_DIR=/usr/share/neo4j/lib
+      BROWSER_JAR="$NEO4J_LIB_DIR/neo4j-browser-$NEO4J_BROWSER_VERSION.jar"
+      if [ ! -f "$BROWSER_JAR" ] || ! echo "$NEO4J_BROWSER_SHA1  $BROWSER_JAR" | sha1sum -c --status -; then
+        BROWSER_URL="https://repo1.maven.org/maven2/org/neo4j/client/neo4j-browser/$NEO4J_BROWSER_VERSION/neo4j-browser-$NEO4J_BROWSER_VERSION.jar"
+        curl -fSL -o "$BROWSER_JAR.tmp" "$BROWSER_URL"
+        echo "$NEO4J_BROWSER_SHA1  $BROWSER_JAR.tmp" | sha1sum -c --status - || { echo "neo4j-browser jar checksum mismatch" >&2; rm -f "$BROWSER_JAR.tmp"; exit 1; }
+        mv "$BROWSER_JAR.tmp" "$BROWSER_JAR"
+      fi
+      chown neo4j:neo4j "$BROWSER_JAR"
+      chmod 644 "$BROWSER_JAR"
+
       # 3. Mount the dedicated EBS data volume at /var/lib/neo4j (the Neo4j data
       #    home) so the graph database survives instance replacement. The volume
       #    is attached as /dev/xvdf but surfaces as an NVMe device on Nitro
