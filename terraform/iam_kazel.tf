@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Dedicated IAM user "kazel" for human access to the DB and Kafka UI instances
 # via SSM. No broad SSM access: kazel may open an SSM StartSession
-# port-forwarding tunnel to both main_db and kafka_ui instances, and an
+# port-forwarding tunnel to the main_db, kafka_ui and neo4j instances, and an
 # interactive shell session to the kafka_ui instance only. Kazel may manage
 # only its own sessions. Programmatic (AWS CLI) and console access are both
 # enabled; the access key and console password are stored in Secrets Manager.
@@ -38,8 +38,8 @@ resource "aws_iam_user_login_profile" "kazel" {
 
 # ---------------------------------------------------------------------------
 # SSM access policy for kazel.
-#   - StartPortForwardingSession: port-forwarding tunnel to main_db and kafka_ui
-#     using the two AWS port-forwarding documents.
+#   - StartPortForwardingSession: port-forwarding tunnel to main_db, kafka_ui
+#     and neo4j using the two AWS port-forwarding documents.
 #   - StartInteractiveSession: interactive shell session to kafka_ui only (no
 #     document restriction so aws ssm start-session works directly).
 #   - Terminate/Resume: only sessions owned by kazel (aws:username condition via
@@ -53,6 +53,7 @@ data "aws_iam_policy_document" "kazel_ssm_port_forward" {
     resources = [
       aws_instance.main_db.arn,
       aws_instance.kafka_ui.arn,
+      aws_instance.neo4j.arn,
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSession",
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSessionToRemoteHost",
     ]
