@@ -49,7 +49,7 @@ locals {
   # lives on this separate EBS volume so the database survives main_db instance
   # replacement (user_data_replace_on_change recreates the instance).
   main_db_data_volume_size = {
-    develop = 20
+    develop = 100
     staging = 100
     prod    = 500
   }
