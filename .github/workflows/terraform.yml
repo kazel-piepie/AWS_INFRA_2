@@ -78,8 +78,8 @@ jobs:
 
           read -r -d '' BOOTSTRAP <<'SCRIPT' || true
           set -euo pipefail
-          if rpm -q pgvector_16 >/dev/null 2>&1; then
-            echo "pgvector_16 already installed; skipping PGDG migration"
+          if rpm -q timescaledb_16 >/dev/null 2>&1; then
+            echo "timescaledb_16 already installed; skipping PGDG migration"
             exit 0
           fi
           echo "=== Stopping Amazon PostgreSQL service ==="
@@ -90,14 +90,14 @@ jobs:
           rpm -e --nodeps postgresql16-server postgresql16 postgresql16-private-libs 2>/dev/null || true
           echo "=== Adding PGDG EL-9 repository ==="
           rpm --import https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
-          printf '[pgdg16]\nname=PostgreSQL 16 for RHEL 9 x86_64\nbaseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64\nenabled=1\ngpgcheck=1\ngpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL\n' > /etc/yum.repos.d/pgdg16.repo
+          printf '[pgdg16]\nname=PostgreSQL 16 for RHEL 9 x86_64\nbaseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64\nenabled=1\ngpgcheck=1\ngpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL\npriority=1\n' > /etc/yum.repos.d/pgdg16.repo
           dnf -qy module disable postgresql || true
           echo "=== Installing PGDG PostgreSQL 16 ==="
-          dnf install -y postgresql16-server postgresql16
+          dnf install -y postgresql16-server postgresql16 postgresql16-devel
           echo "=== Installing TimescaleDB, pgvector, pgvectorscale ==="
-          dnf install -y timescaledb-2-postgresql-16
+          dnf install -y timescaledb_16
           dnf install -y pgvector_16
-          dnf install -y timescaledb-vector-postgresql-16 || echo "timescaledb-vector not in repos; skipping"
+          dnf install -y pgvectorscale-postgresql-16 || echo "pgvectorscale not in repos; skipping"
           echo "=== Updating EBS lib dir with PGDG-path .so files ==="
           PG_LIB_EBS=/var/lib/pgsql/lib
           mkdir -p "$PG_LIB_EBS"
