@@ -36,55 +36,24 @@ locals {
       metadata_expire=300
       REPOEOF
 
-      # 2. Install native PostgreSQL 16 first so /usr/bin/pg_config exists before
-      #    TimescaleDB's RPM scriptlets run.
+      # 2. Add PGDG EL-9 repository (AL2023 is RHEL9-compatible). pgvector_16 and
+      #    pgvectorscale only exist in the PGDG repo, not in Amazon's native PG repo.
+      #    Disable the Amazon postgresql module so PGDG packages take precedence.
+      dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+      dnf -qy module disable postgresql || true
+
+      # 3. Install PGDG PostgreSQL 16. pg_config lands at /usr/pgsql-16/bin/pg_config,
+      #    libs at /usr/pgsql-16/lib/, extension files at /usr/pgsql-16/share/extension/.
       dnf -y install postgresql16-server postgresql16
 
-      # 2a. The el8 TimescaleDB RPM %post invokes /usr/pgsql-16/bin/pg_config (the
-      #     PGDG directory layout), but AL2023's native postgresql16 package ships
-      #     pg_config at /usr/bin/pg_config. Without that path the %post scriptlet
-      #     cannot find pg_config and the install fails. Create the expected path
-      #     as a symlink before installing TimescaleDB (skip if already present).
-      if [ ! -e /usr/pgsql-16/bin/pg_config ]; then
-        mkdir -p /usr/pgsql-16/bin
-        ln -sf /usr/bin/pg_config /usr/pgsql-16/bin/pg_config
-      fi
-
-      # 2b. Install TimescaleDB now that pg_config is discoverable.
+      # 4. Install TimescaleDB, pgvector, and pgvectorscale. The Timescale el8
+      #    packagecloud repo is built for PGDG postgresql16 so paths align correctly.
       dnf -y install timescaledb-2-postgresql-16
+      dnf -y install pgvector_16
+      dnf -y install timescaledb-vector-postgresql-16 || \
+        echo "timescaledb-vector not available in configured repos; skipping"
 
-      # 2c. Copy TimescaleDB .so files to EBS (/var/lib/pgsql/lib/) so they
-      #     survive instance replacement, then symlink into /usr/lib64/pgsql/.
-      #     dynamic_library_path (added in step 4) lets PostgreSQL find them
-      #     from EBS even before dnf runs on a replaced instance.
-      PG_EBS_LIBDIR=/var/lib/pgsql/lib
-      mkdir -p "$PG_EBS_LIBDIR"
-      chown postgres:postgres "$PG_EBS_LIBDIR"
-      cp -f /usr/lib64/timescaledb-loader-pg16/timescaledb.so "$PG_EBS_LIBDIR/"
-      for so in /usr/lib64/timescaledb-pg16/*.so; do cp -f "$so" "$PG_EBS_LIBDIR/"; done
-      PG_LIBDIR=/usr/lib64/pgsql
-      ln -sf "$PG_EBS_LIBDIR/timescaledb.so" "$PG_LIBDIR/timescaledb.so"
-      for so in "$PG_EBS_LIBDIR"/timescaledb-*.so; do ln -sf "$so" "$PG_LIBDIR/"; done
-
-      # 2d. Symlink .control and .sql into AL2023 native share dir.
-      #     el8 RPM installs these under /usr/lib64/timescaledb-*-pg16/.
-      SHARE_DIR=/usr/share/pgsql/extension
-      mkdir -p "$SHARE_DIR"
-      ln -sf /usr/lib64/timescaledb-loader-pg16/timescaledb.control "$SHARE_DIR/timescaledb.control"
-      for sql in /usr/lib64/timescaledb-pg16/timescaledb--*.sql; do
-        ln -sf "$sql" "$SHARE_DIR/"
-      done
-
-      # 3. Mount the dedicated EBS data volume at /var/lib/pgsql (the postgres
-      #    home), NOT directly at the data directory. A fresh ext4 filesystem
-      #    contains a lost+found at its root; mounting it on the data dir would
-      #    place lost+found *inside* PGDATA and make initdb refuse to run with
-      #    "directory not empty". Mounting one level up keeps lost+found at
-      #    /var/lib/pgsql/lost+found, separate from the PGDATA subdirectory
-      #    /var/lib/pgsql/data. PGDATA stays the AL2023 native default, so the
-      #    stock postgresql systemd unit needs no override.
-      #    The volume is attached as /dev/xvdf but surfaces as an NVMe device on
-      #    Nitro instances, so resolve the real device node before using it.
+      # 5. Mount the dedicated EBS data volume at /var/lib/pgsql.
       PG_MOUNT_DIR=/var/lib/pgsql
       PG_DATA_DIR=$PG_MOUNT_DIR/data
       DATA_DEV=""
@@ -103,16 +72,10 @@ locals {
       done
       test -n "$DATA_DEV"
 
-      # 3a. Format only if the volume has no filesystem yet (preserve any data
-      #     already written by a previous instance).
       if ! blkid "$DATA_DEV" >/dev/null 2>&1; then
         mkfs.ext4 -L pgdata "$DATA_DEV"
       fi
 
-      # 3b. Mount the volume at $PG_MOUNT_DIR and persist in fstab by UUID (nofail
-      #     so a missing volume does not block boot). Then create the PGDATA
-      #     subdirectory, which PostgreSQL requires to be owned by postgres and
-      #     mode 0700. lost+found stays at $PG_MOUNT_DIR/lost+found, outside PGDATA.
       mkdir -p "$PG_MOUNT_DIR"
       DATA_UUID=$(blkid -s UUID -o value "$DATA_DEV")
       if ! grep -q "$DATA_UUID" /etc/fstab; then
@@ -124,39 +87,40 @@ locals {
       chown postgres:postgres "$PG_DATA_DIR"
       chmod 700 "$PG_DATA_DIR"
 
-      # 4. Initialize the cluster only on a fresh volume (no PG_VERSION yet) so an
-      #    existing database is preserved across instance replacement.
+      # 5a. Copy extension .so files to EBS lib dir after mount for persistence
+      #     across instance replacement.
+      PG_EBS_LIBDIR=$PG_MOUNT_DIR/lib
+      mkdir -p "$PG_EBS_LIBDIR"
+      chown postgres:postgres "$PG_EBS_LIBDIR"
+      for so in /usr/pgsql-16/lib/timescaledb*.so \
+                /usr/pgsql-16/lib/vector.so \
+                /usr/pgsql-16/lib/pgvectorscale*.so; do
+        [ -f "$so" ] && cp -f "$so" "$PG_EBS_LIBDIR/" || true
+      done
+
+      # 5b. Override PGDG default PGDATA (/var/lib/pgsql/16/data) to the EBS path
+      #     /var/lib/pgsql/data so the existing database is found on boot.
+      mkdir -p /etc/systemd/system/postgresql-16.service.d
+      printf '[Service]\nEnvironment=PGDATA=/var/lib/pgsql/data\n' \
+        > /etc/systemd/system/postgresql-16.service.d/pgdata.conf
+      systemctl daemon-reload
+
+      # 6. Initialize the cluster only on a fresh volume (preserves existing data).
       if [ ! -f "$PG_DATA_DIR/PG_VERSION" ]; then
-        /usr/bin/postgresql-setup --initdb
+        /usr/pgsql-16/bin/postgresql-16-setup initdb
         sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_DATA_DIR/postgresql.conf"
         echo "shared_preload_libraries = 'timescaledb'" >> "$PG_DATA_DIR/postgresql.conf"
         echo "dynamic_library_path = '\$libdir:/var/lib/pgsql/lib'" >> "$PG_DATA_DIR/postgresql.conf"
         echo "host all all 0.0.0.0/0 md5" >> "$PG_DATA_DIR/pg_hba.conf"
-        # Tune TimescaleDB before first start so settings take effect on boot.
         timescaledb-tune --quiet --yes --conf-path "$PG_DATA_DIR/postgresql.conf" || true
       fi
 
-      # 4a. Loopback connections must use password auth (scram-sha-256); AL2023
-      #     ships them as ident, which blocks password logins. Idempotent.
+      # 6a. Loopback connections must use password auth (scram-sha-256). Idempotent.
       sed -ri 's#^(host[[:space:]]+all[[:space:]]+all[[:space:]]+127\.0\.0\.1/32[[:space:]]+)ident#\1scram-sha-256#' "$PG_DATA_DIR/pg_hba.conf"
       sed -ri 's#^(host[[:space:]]+all[[:space:]]+all[[:space:]]+::1/128[[:space:]]+)ident#\1scram-sha-256#' "$PG_DATA_DIR/pg_hba.conf"
 
-      # 6. Install pgvector and pgvectorscale (idempotent -- skips if pgvector_16
-      #    RPM already present; copies .so files to EBS lib dir for persistence).
-      if ! rpm -q pgvector_16 >/dev/null 2>&1; then
-        dnf install -y pgvector_16
-        dnf install -y timescaledb-vector-postgresql-16 || \
-          echo "timescaledb-vector not available in configured repos; skipping"
-        for so in /usr/pgsql-16/lib/vector.so /usr/pgsql-16/lib/pgvectorscale*.so; do
-          [ -f "$so" ] && cp "$so" /var/lib/pgsql/lib/ || true
-        done
-        echo "pgvector/pgvectorscale install complete"
-      else
-        echo "pgvector_16 already installed; skipping"
-      fi
-
-      # 5. Start PostgreSQL
-      systemctl enable --now postgresql
+      # 7. Start PostgreSQL (PGDG service name: postgresql-16)
+      systemctl enable --now postgresql-16
     EOT
     neo4j    = <<-EOT
       # 1. Neo4j 5 requires a Java 17 runtime; install the headless Corretto JDK.
