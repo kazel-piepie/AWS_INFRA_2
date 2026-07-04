@@ -78,8 +78,8 @@ jobs:
 
           read -r -d '' BOOTSTRAP <<'SCRIPT' || true
           set -euo pipefail
-          if rpm -q timescaledb_16 >/dev/null 2>&1; then
-            echo "timescaledb_16 already installed; skipping PGDG migration"
+          if rpm -q postgresql16-server 2>/dev/null | grep -q PGDG; then
+            echo "PGDG postgresql16-server already installed; skipping migration"
             exit 0
           fi
           echo "=== Stopping Amazon PostgreSQL service ==="
