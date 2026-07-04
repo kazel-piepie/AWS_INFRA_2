@@ -39,10 +39,19 @@ locals {
       # 2. Add PGDG EL-9 repository (AL2023 is RHEL9-compatible). pgvector_16 and
       #    pgvectorscale only exist in the PGDG repo, not in Amazon's native PG repo.
       #    Disable the Amazon postgresql module so PGDG packages take precedence.
-      #    AL2023 lacks /etc/redhat-release which the PGDG repo RPM requires; create
-      #    a compatibility shim so dnf dependency resolution passes cleanly.
-      echo "Red Hat Enterprise Linux release 9.0 (Plow)" > /etc/redhat-release
-      dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+      #    AL2023 lacks /etc/redhat-release so the PGDG repo RPM cannot be installed
+      #    via dnf ($releasever also resolves to 2023, causing 404s downstream).
+      #    Write the repo file directly with releasever pinned to 9 and import the
+      #    GPG key -- no platform guard RPM needed.
+      rpm --import https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
+      cat > /etc/yum.repos.d/pgdg16.repo << 'PGDGEOF'
+      [pgdg16]
+      name=PostgreSQL 16 for RHEL 9 x86_64
+      baseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64
+      enabled=1
+      gpgcheck=1
+      gpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
+      PGDGEOF
       dnf -qy module disable postgresql || true
 
       # 3. Install PGDG PostgreSQL 16. pg_config lands at /usr/pgsql-16/bin/pg_config,
