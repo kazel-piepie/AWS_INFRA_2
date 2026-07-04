@@ -66,6 +66,65 @@ jobs:
         if: github.event_name == 'push'
         run: terraform apply -no-color -input=false -auto-approve tfplan
 
+      # Ensure pgvector and pgvectorscale are installed on the already-running
+      # main_db instance. user_data only runs on (re)boot; this step drives the
+      # install over SSM on every apply. Idempotent: no-op if pgvector_16 RPM
+      # already present.
+      - name: Bootstrap pgvectorscale on running main_db instance
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
+          echo "main_db instance: $MAIN_DB_ID"
+
+          read -r -d '' BOOTSTRAP <<'SCRIPT' || true
+          set -euo pipefail
+          if rpm -q pgvector_16 >/dev/null 2>&1; then
+            echo "pgvector_16 already installed; skipping"
+            exit 0
+          fi
+          dnf install -y pgvector_16
+          dnf install -y timescaledb-vector-postgresql-16 || echo "timescaledb-vector not in repos; skipping"
+          PG_LIB_EBS=/var/lib/pgsql/lib
+          mkdir -p "$PG_LIB_EBS"
+          for so in /usr/pgsql-16/lib/vector.so /usr/pgsql-16/lib/pgvectorscale*.so; do
+            [ -f "$so" ] && cp "$so" "$PG_LIB_EBS/" || true
+          done
+          echo "pgvector/pgvectorscale installed; restarting PostgreSQL"
+          systemctl restart postgresql
+          echo "done"
+          SCRIPT
+
+          PARAMS=$(jq -n --arg script "$BOOTSTRAP" '{commands: [$script]}')
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$MAIN_DB_ID" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 180 \
+            --region "${AWS_REGION}" \
+            --parameters "$PARAMS" \
+            --query "Command.CommandId" --output text --no-cli-pager)
+          echo "SSM command id: $CMD_ID"
+          STATUS="Pending"
+          for i in $(seq 1 36); do
+            sleep 5
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" \
+              --instance-id "$MAIN_DB_ID" \
+              --region "${AWS_REGION}" \
+              --query "Status" --output text --no-cli-pager 2>/dev/null || echo "Pending")
+            echo "attempt $i/36: status=$STATUS"
+            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then break; fi
+          done
+          OUT=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$MAIN_DB_ID" \
+            --region "${AWS_REGION}" --query "StandardOutputContent" --output text --no-cli-pager)
+          ERR=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$MAIN_DB_ID" \
+            --region "${AWS_REGION}" --query "StandardErrorContent" --output text --no-cli-pager)
+          echo "----- SSM stdout -----"; echo "$OUT"
+          echo "----- SSM stderr -----"; echo "$ERR"
+          if [ "$STATUS" != "Success" ]; then
+            echo "pgvectorscale bootstrap failed (status: $STATUS)" >&2; exit 1
+          fi
+
       # Ensure the Neo4j Browser web UI jar is present on the already-running
       # Neo4j instance. user_data only installs it on (re)boot, so an in-place
       # apply that does not replace the instance would otherwise never pick up a
