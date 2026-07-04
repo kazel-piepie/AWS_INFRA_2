@@ -57,7 +57,7 @@ locals {
 
       # 3. Install PGDG PostgreSQL 16. pg_config lands at /usr/pgsql-16/bin/pg_config,
       #    libs at /usr/pgsql-16/lib/, extension files at /usr/pgsql-16/share/extension/.
-      dnf -y install postgresql16-server postgresql16 postgresql16-devel
+      dnf -y install postgresql16-server postgresql16
 
       # 4. Install TimescaleDB, pgvector, and pgvectorscale. The Timescale el8
       #    packagecloud repo is built for PGDG postgresql16 so paths align correctly.
