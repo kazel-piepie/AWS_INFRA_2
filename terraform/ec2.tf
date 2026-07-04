@@ -146,6 +146,27 @@ locals {
       #    postgresql-16). Restart so any changed preload libraries are reloaded.
       systemctl enable postgresql
       systemctl restart postgresql
+
+      # 5. Build pgvectorscale from source (Rust/pgrx)
+      export HOME=/root
+      export PATH="/root/.cargo/bin:$PATH"
+      dnf install -y --disablerepo=pgdg16 postgresql16-server-devel gcc make git clang openssl-devel
+      if ! command -v cargo &>/dev/null; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+      fi
+      source /root/.cargo/env 2>/dev/null || true
+      cargo install --locked cargo-pgrx@0.16.1
+      cargo pgrx init --pg16 /usr/bin/pg_config || true
+      rm -rf /tmp/pgvs
+      git clone --depth 1 https://github.com/timescale/pgvectorscale.git /tmp/pgvs
+      cd /tmp/pgvs/pgvectorscale
+      cargo pgrx install --pg-config /usr/bin/pg_config --release
+      find /usr/pgsql-16/lib -name "vectorscale*.so" -exec cp -f {} /usr/lib64/pgsql/ \; 2>/dev/null || true
+      find /usr/pgsql-16/share/extension -name "vectorscale*" -exec cp -f {} /usr/share/pgsql/extension/ \; 2>/dev/null || true
+      rm -rf /tmp/pgvs
+
+      # 6. Enable vectorscale extension in postgres database
+      su -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;\"" postgres || true
     EOT
     neo4j    = <<-EOT
       # 1. Neo4j 5 requires a Java 17 runtime; install the headless Corretto JDK.
