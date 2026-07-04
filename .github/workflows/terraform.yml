@@ -66,11 +66,10 @@ jobs:
         if: github.event_name == 'push'
         run: terraform apply -no-color -input=false -auto-approve tfplan
 
-      # Ensure pgvector and pgvectorscale are installed on the already-running
-      # main_db instance. user_data only runs on (re)boot; this step drives the
-      # install over SSM on every apply. Idempotent: no-op if pgvector_16 RPM
-      # already present.
-      - name: Bootstrap pgvectorscale on running main_db instance
+      # Migrate main_db from Amazon PostgreSQL 16 to PGDG PostgreSQL 16, then
+      # install pgvector_16 and pgvectorscale. Required because pgvector_16 only
+      # exists in the PGDG repo. Idempotent: skips if pgvector_16 already installed.
+      - name: Migrate main_db to PGDG PostgreSQL + install pgvector/pgvectorscale
         if: github.event_name == 'push'
         run: |
           set -euo pipefail
@@ -80,39 +79,60 @@ jobs:
           read -r -d '' BOOTSTRAP <<'SCRIPT' || true
           set -euo pipefail
           if rpm -q pgvector_16 >/dev/null 2>&1; then
-            echo "pgvector_16 already installed; skipping"
+            echo "pgvector_16 already installed; skipping PGDG migration"
             exit 0
           fi
+          echo "=== Stopping Amazon PostgreSQL service ==="
+          systemctl stop postgresql || systemctl stop postgresql-16 || true
+          echo "=== Removing TimescaleDB el8 packages ==="
+          rpm -e --nodeps timescaledb-2-postgresql-16 timescaledb-2-loader-postgresql-16 2>/dev/null || true
+          echo "=== Removing Amazon PostgreSQL 16 packages ==="
+          rpm -e --nodeps postgresql16-server postgresql16 postgresql16-private-libs 2>/dev/null || true
+          echo "=== Adding PGDG EL-9 repository ==="
+          dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+          dnf -qy module disable postgresql || true
+          echo "=== Installing PGDG PostgreSQL 16 ==="
+          dnf install -y postgresql16-server postgresql16
+          echo "=== Installing TimescaleDB, pgvector, pgvectorscale ==="
+          dnf install -y timescaledb-2-postgresql-16
           dnf install -y pgvector_16
           dnf install -y timescaledb-vector-postgresql-16 || echo "timescaledb-vector not in repos; skipping"
+          echo "=== Updating EBS lib dir with PGDG-path .so files ==="
           PG_LIB_EBS=/var/lib/pgsql/lib
           mkdir -p "$PG_LIB_EBS"
-          for so in /usr/pgsql-16/lib/vector.so /usr/pgsql-16/lib/pgvectorscale*.so; do
-            [ -f "$so" ] && cp "$so" "$PG_LIB_EBS/" || true
+          for so in /usr/pgsql-16/lib/timescaledb*.so \
+                    /usr/pgsql-16/lib/vector.so \
+                    /usr/pgsql-16/lib/pgvectorscale*.so; do
+            [ -f "$so" ] && cp -f "$so" "$PG_LIB_EBS/" || true
           done
-          echo "pgvector/pgvectorscale installed; restarting PostgreSQL"
-          systemctl restart postgresql
-          echo "done"
+          echo "=== Creating PGDG systemd PGDATA override ==="
+          mkdir -p /etc/systemd/system/postgresql-16.service.d
+          printf '[Service]\nEnvironment=PGDATA=/var/lib/pgsql/data\n' \
+            > /etc/systemd/system/postgresql-16.service.d/pgdata.conf
+          systemctl daemon-reload
+          echo "=== Starting postgresql-16 ==="
+          systemctl enable --now postgresql-16
+          echo "=== PGDG migration complete ==="
           SCRIPT
 
           PARAMS=$(jq -n --arg script "$BOOTSTRAP" '{commands: [$script]}')
           CMD_ID=$(aws ssm send-command \
             --instance-ids "$MAIN_DB_ID" \
             --document-name "AWS-RunShellScript" \
-            --timeout-seconds 180 \
+            --timeout-seconds 300 \
             --region "${AWS_REGION}" \
             --parameters "$PARAMS" \
             --query "Command.CommandId" --output text --no-cli-pager)
           echo "SSM command id: $CMD_ID"
           STATUS="Pending"
-          for i in $(seq 1 36); do
+          for i in $(seq 1 60); do
             sleep 5
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" \
               --instance-id "$MAIN_DB_ID" \
               --region "${AWS_REGION}" \
               --query "Status" --output text --no-cli-pager 2>/dev/null || echo "Pending")
-            echo "attempt $i/36: status=$STATUS"
+            echo "attempt $i/60: status=$STATUS"
             if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then break; fi
           done
           OUT=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$MAIN_DB_ID" \
@@ -122,7 +142,7 @@ jobs:
           echo "----- SSM stdout -----"; echo "$OUT"
           echo "----- SSM stderr -----"; echo "$ERR"
           if [ "$STATUS" != "Success" ]; then
-            echo "pgvectorscale bootstrap failed (status: $STATUS)" >&2; exit 1
+            echo "PGDG migration did not succeed (status: $STATUS)" >&2; exit 1
           fi
 
       # Ensure the Neo4j Browser web UI jar is present on the already-running
