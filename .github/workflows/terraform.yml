@@ -66,10 +66,15 @@ jobs:
         if: github.event_name == 'push'
         run: terraform apply -no-color -input=false -auto-approve tfplan
 
-      # Migrate main_db from Amazon PostgreSQL 16 to PGDG PostgreSQL 16, then
-      # install pgvector_16 and pgvectorscale. Required because pgvector_16 only
-      # exists in the PGDG repo. Idempotent: skips if pgvector_16 already installed.
-      - name: Migrate main_db to PGDG PostgreSQL + install pgvector/pgvectorscale
+      # Ensure main_db runs the Amazon Linux 2023 postgresql16-server (NOT the PGDG
+      # RHEL-9 server, which is uninstallable on AL2023: the PGDG server links
+      # libldap.so.2 but AL2023 only ships libldap_r-2.4.so.2). pgvector and
+      # timescaledb are sourced from the PGDG extension-only RPMs -- these carry no
+      # libldap dependency and are ABI-compatible with PostgreSQL 16 -- then their
+      # .so/control/SQL files are symlinked into the Amazon server's pkglibdir and
+      # extension dir so the running Amazon postmaster can load them. Idempotent:
+      # skips when postgresql is already active and the vector extension is available.
+      - name: Ensure Amazon postgresql16-server + pgvector on main_db
         if: github.event_name == 'push'
         run: |
           set -euo pipefail
@@ -78,42 +83,98 @@ jobs:
 
           read -r -d '' BOOTSTRAP <<'SCRIPT' || true
           set -euo pipefail
-          if rpm -q postgresql16-server 2>/dev/null | grep -q PGDG; then
-            echo "PGDG postgresql16-server already installed; skipping migration"
+
+          # 0. Idempotency: skip when postgresql is already running AND pgvector is
+          #    available as an extension on the Amazon server.
+          if systemctl is-active --quiet postgresql 2>/dev/null && \
+             su - postgres -c "psql -tAc \"SELECT 1 FROM pg_available_extensions WHERE name='vector'\" -d postgres" 2>/dev/null | grep -q 1; then
+            echo "postgresql already running and pgvector available; skipping"
             exit 0
           fi
-          echo "=== Stopping Amazon PostgreSQL service ==="
-          systemctl stop postgresql || systemctl stop postgresql-16 || true
-          echo "=== Removing TimescaleDB el8 packages ==="
-          rpm -e --nodeps timescaledb-2-postgresql-16 timescaledb-2-loader-postgresql-16 2>/dev/null || true
-          echo "=== Removing Amazon PostgreSQL 16 packages ==="
-          rpm -e --nodeps postgresql16-server postgresql16 postgresql16-private-libs 2>/dev/null || true
-          echo "=== Adding PGDG EL-9 repository ==="
-          rpm --import https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
-          printf '[pgdg16]\nname=PostgreSQL 16 for RHEL 9 x86_64\nbaseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64\nenabled=1\ngpgcheck=1\ngpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL\npriority=1\n' > /etc/yum.repos.d/pgdg16.repo
-          dnf -qy module disable postgresql || true
-          echo "=== Installing PGDG PostgreSQL 16 ==="
-          dnf install -y postgresql16-server postgresql16
-          echo "=== Installing TimescaleDB, pgvector, pgvectorscale ==="
-          dnf install -y timescaledb_16
-          dnf install -y pgvector_16
-          dnf install -y pgvectorscale-postgresql-16 || echo "pgvectorscale not in repos; skipping"
-          echo "=== Updating EBS lib dir with PGDG-path .so files ==="
-          PG_LIB_EBS=/var/lib/pgsql/lib
-          mkdir -p "$PG_LIB_EBS"
-          for so in /usr/pgsql-16/lib/timescaledb*.so \
-                    /usr/pgsql-16/lib/vector.so \
+
+          # 1. Ensure the PGDG EL-9 repo exists ONLY as a source for the extension
+          #    RPMs. No priority=1 and no PGDG server -- the repo is used solely to
+          #    obtain pgvector_16/timescaledb_16, which are extension-only packages.
+          rpm --import https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL 2>/dev/null || true
+          printf '%s\n' \
+            '[pgdg16]' \
+            'name=PostgreSQL 16 for RHEL 9 x86_64' \
+            'baseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64' \
+            'enabled=1' \
+            'gpgcheck=1' \
+            'gpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL' \
+            > /etc/yum.repos.d/pgdg16.repo
+
+          # 2. Keep the Amazon Linux 2023 postgresql16-server. Pin the install to the
+          #    Amazon repo (disable any PGDG repo) so the broken PGDG server can never
+          #    win -- this is idempotent when the Amazon package is already present.
+          echo "=== Ensuring Amazon postgresql16-server ==="
+          dnf install -y --disablerepo='pgdg*' postgresql16-server postgresql16
+
+          # 3. Install the PGDG extension RPMs. pgvector exists ONLY in the PGDG repo
+          #    (neither Amazon nor Timescale ship it). pgvectorscale is not packaged
+          #    in any configured repo, so it is best-effort.
+          echo "=== Installing pgvector_16 + timescaledb_16 (extension RPMs) ==="
+          dnf install -y pgvector_16 timescaledb_16
+          dnf install -y pgvectorscale-postgresql-16 2>/dev/null \
+            || echo "pgvectorscale not packaged in any repo; skipping (a working install needs a source build)"
+
+          # 4. Resolve the Amazon server's extension paths. pg_config is absent on
+          #    this instance (postgresql16-devel is uninstallable on AL2023 for the
+          #    same libldap reason), so fall back to the known AL2023 paths.
+          PG_CONFIG=$(command -v pg_config || true)
+          if [ -n "$PG_CONFIG" ] && [ -x "$PG_CONFIG" ]; then
+            PKGLIBDIR=$("$PG_CONFIG" --pkglibdir)
+            SHAREDIR=$("$PG_CONFIG" --sharedir)
+          else
+            PKGLIBDIR=/usr/lib64/pgsql
+            SHAREDIR=/usr/share/pgsql
+          fi
+          EXTDIR="$SHAREDIR/extension"
+          mkdir -p "$PKGLIBDIR" "$EXTDIR"
+          echo "Amazon pkglibdir=$PKGLIBDIR extension dir=$EXTDIR"
+
+          # 5. Symlink the PGDG-built extension .so + control/SQL files (installed
+          #    under /usr/pgsql-16) into the Amazon server's pkglibdir/extension dir.
+          echo "=== Linking PGDG extension files into Amazon paths ==="
+          for so in /usr/pgsql-16/lib/vector.so \
+                    /usr/pgsql-16/lib/timescaledb*.so \
                     /usr/pgsql-16/lib/pgvectorscale*.so; do
-            [ -f "$so" ] && cp -f "$so" "$PG_LIB_EBS/" || true
+            [ -e "$so" ] && ln -sf "$so" "$PKGLIBDIR/$(basename "$so")"
           done
-          echo "=== Creating PGDG systemd PGDATA override ==="
-          mkdir -p /etc/systemd/system/postgresql-16.service.d
-          printf '[Service]\nEnvironment=PGDATA=/var/lib/pgsql/data\n' \
-            > /etc/systemd/system/postgresql-16.service.d/pgdata.conf
-          systemctl daemon-reload
-          echo "=== Starting postgresql-16 ==="
-          systemctl enable --now postgresql-16
-          echo "=== PGDG migration complete ==="
+          for f in /usr/pgsql-16/share/extension/vector* \
+                   /usr/pgsql-16/share/extension/timescaledb* \
+                   /usr/pgsql-16/share/extension/vectorscale*; do
+            [ -e "$f" ] && ln -sf "$f" "$EXTDIR/$(basename "$f")"
+          done
+
+          # 6. Ensure PGDATA exists (already does on this instance at v16, so this is
+          #    skipped). Use the Amazon initializer, not the PGDG one.
+          if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then
+            postgresql-setup --initdb
+          fi
+
+          # 7. Ensure timescaledb is preloaded (required to load its extension).
+          CONF=/var/lib/pgsql/data/postgresql.conf
+          if [ -f "$CONF" ] && ! grep -q "^shared_preload_libraries.*timescaledb" "$CONF"; then
+            echo "shared_preload_libraries = 'timescaledb'" >> "$CONF"
+          fi
+
+          # 8. Start the Amazon service. The unit is "postgresql" (NOT postgresql-16),
+          #    and it already sets PGDATA=/var/lib/pgsql/data. Restart so any changed
+          #    preload libraries are reloaded.
+          echo "=== Starting postgresql (Amazon unit) ==="
+          systemctl enable postgresql
+          systemctl restart postgresql
+
+          # 9. Verify the extensions load against the Amazon server.
+          su - postgres -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS vector;\"" \
+            || echo "WARNING: vector extension not loadable"
+          su - postgres -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS timescaledb;\"" \
+            || echo "WARNING: timescaledb extension not loadable"
+          su - postgres -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;\"" \
+            || echo "WARNING: pgvectorscale (vectorscale) not available; not packaged in any repo"
+          echo "=== Amazon postgresql16 + pgvector bootstrap complete ==="
           SCRIPT
 
           PARAMS=$(jq -n --arg script "$BOOTSTRAP" '{commands: [$script]}')
