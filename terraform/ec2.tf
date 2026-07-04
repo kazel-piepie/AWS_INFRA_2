@@ -22,27 +22,16 @@ locals {
         provectuslabs/kafka-ui:latest
     EOT
     main_db  = <<-EOT
-      # 1. TimescaleDB YUM repository
-      cat > /etc/yum.repos.d/timescale_timescaledb.repo << 'REPOEOF'
-      [timescale_timescaledb]
-      name=timescale_timescaledb
-      baseurl=https://packagecloud.io/timescale/timescaledb/el/8/$basearch
-      repo_gpgcheck=1
-      gpgcheck=0
-      enabled=1
-      gpgkey=https://packagecloud.io/timescale/timescaledb/gpgkey
-      sslverify=1
-      sslcacert=/etc/pki/tls/certs/ca-bundle.crt
-      metadata_expire=300
-      REPOEOF
+      # Run the Amazon Linux 2023 postgresql16-server (already provided by the AMI's
+      # postgresql16-server package). We do NOT install the PGDG RHEL-9 server: it
+      # links libldap.so.2, but AL2023 only ships libldap_r-2.4.so.2, so the PGDG
+      # server is uninstallable here. pgvector and timescaledb are sourced from the
+      # PGDG extension-only RPMs (no libldap dependency, ABI-compatible with PG16)
+      # and symlinked into the Amazon server's pkglibdir/extension directory.
 
-      # 2. Add PGDG EL-9 repository (AL2023 is RHEL9-compatible). pgvector_16 and
-      #    pgvectorscale only exist in the PGDG repo, not in Amazon's native PG repo.
-      #    Disable the Amazon postgresql module so PGDG packages take precedence.
-      #    AL2023 lacks /etc/redhat-release so the PGDG repo RPM cannot be installed
-      #    via dnf ($releasever also resolves to 2023, causing 404s downstream).
-      #    Write the repo file directly with releasever pinned to 9 and import the
-      #    GPG key -- no platform guard RPM needed.
+      # 1. Add the PGDG EL-9 repository purely as a source for the extension RPMs.
+      #    No priority=1 and no PGDG server install. AL2023 is RHEL9-compatible so
+      #    the extension .so files are ABI-compatible with the Amazon PG16 server.
       rpm --import https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
       cat > /etc/yum.repos.d/pgdg16.repo << 'PGDGEOF'
       [pgdg16]
@@ -51,22 +40,20 @@ locals {
       enabled=1
       gpgcheck=1
       gpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
-      priority=1
       PGDGEOF
-      dnf -qy module disable postgresql || true
 
-      # 3. Install PGDG PostgreSQL 16. pg_config lands at /usr/pgsql-16/bin/pg_config,
-      #    libs at /usr/pgsql-16/lib/, extension files at /usr/pgsql-16/share/extension/.
-      dnf -y install postgresql16-server postgresql16
+      # 2. Ensure the Amazon postgresql16-server is installed. Pin to the Amazon repo
+      #    (disable any PGDG repo) so the broken PGDG server can never win.
+      dnf install -y --disablerepo='pgdg*' postgresql16-server postgresql16
 
-      # 4. Install TimescaleDB, pgvector, and pgvectorscale. The Timescale el8
-      #    packagecloud repo is built for PGDG postgresql16 so paths align correctly.
-      dnf -y install timescaledb_16
-      dnf -y install pgvector_16
-      dnf -y install pgvectorscale-postgresql-16 || \
-        echo "pgvectorscale not available in configured repos; skipping"
+      # 3. Install the extension RPMs from PGDG. pgvector exists ONLY in the PGDG
+      #    repo (neither Amazon nor Timescale ship it). pgvectorscale is not packaged
+      #    in any repo, so it is best-effort.
+      dnf install -y pgvector_16 timescaledb_16
+      dnf install -y pgvectorscale-postgresql-16 \
+        || echo "pgvectorscale not packaged in any repo; skipping"
 
-      # 5. Mount the dedicated EBS data volume at /var/lib/pgsql.
+      # 4. Mount the dedicated EBS data volume at /var/lib/pgsql.
       PG_MOUNT_DIR=/var/lib/pgsql
       PG_DATA_DIR=$PG_MOUNT_DIR/data
       DATA_DEV=""
@@ -100,8 +87,36 @@ locals {
       chown postgres:postgres "$PG_DATA_DIR"
       chmod 700 "$PG_DATA_DIR"
 
-      # 5a. Copy extension .so files to EBS lib dir after mount for persistence
-      #     across instance replacement.
+      # 5a. Resolve the Amazon server's extension paths. pg_config is absent on
+      #     AL2023 (postgresql16-devel is uninstallable for the same libldap
+      #     reason), so fall back to the known AL2023 postgresql16 paths.
+      PG_CONFIG=$(command -v pg_config || true)
+      if [ -n "$PG_CONFIG" ] && [ -x "$PG_CONFIG" ]; then
+        PKGLIBDIR=$("$PG_CONFIG" --pkglibdir)
+        SHAREDIR=$("$PG_CONFIG" --sharedir)
+      else
+        PKGLIBDIR=/usr/lib64/pgsql
+        SHAREDIR=/usr/share/pgsql
+      fi
+      EXTDIR="$SHAREDIR/extension"
+      mkdir -p "$PKGLIBDIR" "$EXTDIR"
+
+      # 5b. Symlink the PGDG-built extension .so + control/SQL files (installed under
+      #     /usr/pgsql-16) into the Amazon server's pkglibdir/extension dir so the
+      #     running Amazon postmaster can load them.
+      for so in /usr/pgsql-16/lib/vector.so \
+                /usr/pgsql-16/lib/timescaledb*.so \
+                /usr/pgsql-16/lib/pgvectorscale*.so; do
+        [ -e "$so" ] && ln -sf "$so" "$PKGLIBDIR/$(basename "$so")"
+      done
+      for f in /usr/pgsql-16/share/extension/vector* \
+               /usr/pgsql-16/share/extension/timescaledb* \
+               /usr/pgsql-16/share/extension/vectorscale*; do
+        [ -e "$f" ] && ln -sf "$f" "$EXTDIR/$(basename "$f")"
+      done
+
+      # 5c. Also copy the extension .so files to the EBS lib dir so they persist
+      #     across instance replacement (referenced by dynamic_library_path).
       PG_EBS_LIBDIR=$PG_MOUNT_DIR/lib
       mkdir -p "$PG_EBS_LIBDIR"
       chown postgres:postgres "$PG_EBS_LIBDIR"
@@ -111,16 +126,11 @@ locals {
         [ -f "$so" ] && cp -f "$so" "$PG_EBS_LIBDIR/" || true
       done
 
-      # 5b. Override PGDG default PGDATA (/var/lib/pgsql/16/data) to the EBS path
-      #     /var/lib/pgsql/data so the existing database is found on boot.
-      mkdir -p /etc/systemd/system/postgresql-16.service.d
-      printf '[Service]\nEnvironment=PGDATA=/var/lib/pgsql/data\n' \
-        > /etc/systemd/system/postgresql-16.service.d/pgdata.conf
-      systemctl daemon-reload
-
       # 6. Initialize the cluster only on a fresh volume (preserves existing data).
+      #    Use the Amazon initializer (postgresql-setup), not the PGDG one. The
+      #    Amazon unit already sets PGDATA=/var/lib/pgsql/data, so no override.
       if [ ! -f "$PG_DATA_DIR/PG_VERSION" ]; then
-        /usr/pgsql-16/bin/postgresql-16-setup initdb
+        postgresql-setup --initdb
         sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_DATA_DIR/postgresql.conf"
         echo "shared_preload_libraries = 'timescaledb'" >> "$PG_DATA_DIR/postgresql.conf"
         echo "dynamic_library_path = '\$libdir:/var/lib/pgsql/lib'" >> "$PG_DATA_DIR/postgresql.conf"
@@ -132,8 +142,10 @@ locals {
       sed -ri 's#^(host[[:space:]]+all[[:space:]]+all[[:space:]]+127\.0\.0\.1/32[[:space:]]+)ident#\1scram-sha-256#' "$PG_DATA_DIR/pg_hba.conf"
       sed -ri 's#^(host[[:space:]]+all[[:space:]]+all[[:space:]]+::1/128[[:space:]]+)ident#\1scram-sha-256#' "$PG_DATA_DIR/pg_hba.conf"
 
-      # 7. Start PostgreSQL (PGDG service name: postgresql-16)
-      systemctl enable --now postgresql-16
+      # 7. Start PostgreSQL. Amazon's systemd unit is "postgresql" (NOT
+      #    postgresql-16). Restart so any changed preload libraries are reloaded.
+      systemctl enable postgresql
+      systemctl restart postgresql
     EOT
     neo4j    = <<-EOT
       # 1. Neo4j 5 requires a Java 17 runtime; install the headless Corretto JDK.
