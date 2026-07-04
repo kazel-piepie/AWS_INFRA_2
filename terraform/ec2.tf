@@ -141,6 +141,20 @@ locals {
       sed -ri 's#^(host[[:space:]]+all[[:space:]]+all[[:space:]]+127\.0\.0\.1/32[[:space:]]+)ident#\1scram-sha-256#' "$PG_DATA_DIR/pg_hba.conf"
       sed -ri 's#^(host[[:space:]]+all[[:space:]]+all[[:space:]]+::1/128[[:space:]]+)ident#\1scram-sha-256#' "$PG_DATA_DIR/pg_hba.conf"
 
+      # 6. Install pgvector and pgvectorscale (idempotent -- skips if pgvector_16
+      #    RPM already present; copies .so files to EBS lib dir for persistence).
+      if ! rpm -q pgvector_16 >/dev/null 2>&1; then
+        dnf install -y pgvector_16
+        dnf install -y timescaledb-vector-postgresql-16 || \
+          echo "timescaledb-vector not available in configured repos; skipping"
+        for so in /usr/pgsql-16/lib/vector.so /usr/pgsql-16/lib/pgvectorscale*.so; do
+          [ -f "$so" ] && cp "$so" /var/lib/pgsql/lib/ || true
+        done
+        echo "pgvector/pgvectorscale install complete"
+      else
+        echo "pgvector_16 already installed; skipping"
+      fi
+
       # 5. Start PostgreSQL
       systemctl enable --now postgresql
     EOT
