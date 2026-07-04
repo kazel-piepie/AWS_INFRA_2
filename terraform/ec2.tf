@@ -39,6 +39,9 @@ locals {
       # 2. Add PGDG EL-9 repository (AL2023 is RHEL9-compatible). pgvector_16 and
       #    pgvectorscale only exist in the PGDG repo, not in Amazon's native PG repo.
       #    Disable the Amazon postgresql module so PGDG packages take precedence.
+      #    AL2023 lacks /etc/redhat-release which the PGDG repo RPM requires; create
+      #    a compatibility shim so dnf dependency resolution passes cleanly.
+      echo "Red Hat Enterprise Linux release 9.0 (Plow)" > /etc/redhat-release
       dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
       dnf -qy module disable postgresql || true
 
