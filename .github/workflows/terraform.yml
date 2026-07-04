@@ -93,7 +93,7 @@ jobs:
           printf '[pgdg16]\nname=PostgreSQL 16 for RHEL 9 x86_64\nbaseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64\nenabled=1\ngpgcheck=1\ngpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL\npriority=1\n' > /etc/yum.repos.d/pgdg16.repo
           dnf -qy module disable postgresql || true
           echo "=== Installing PGDG PostgreSQL 16 ==="
-          dnf install -y postgresql16-server postgresql16 postgresql16-devel
+          dnf install -y postgresql16-server postgresql16
           echo "=== Installing TimescaleDB, pgvector, pgvectorscale ==="
           dnf install -y timescaledb_16
           dnf install -y pgvector_16
