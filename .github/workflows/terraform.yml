@@ -89,6 +89,7 @@ jobs:
           echo "=== Removing Amazon PostgreSQL 16 packages ==="
           rpm -e --nodeps postgresql16-server postgresql16 postgresql16-private-libs 2>/dev/null || true
           echo "=== Adding PGDG EL-9 repository ==="
+          echo "Red Hat Enterprise Linux release 9.0 (Plow)" > /etc/redhat-release
           dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
           dnf -qy module disable postgresql || true
           echo "=== Installing PGDG PostgreSQL 16 ==="
