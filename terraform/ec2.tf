@@ -51,19 +51,20 @@ locals {
       enabled=1
       gpgcheck=1
       gpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
+      priority=1
       PGDGEOF
       dnf -qy module disable postgresql || true
 
       # 3. Install PGDG PostgreSQL 16. pg_config lands at /usr/pgsql-16/bin/pg_config,
       #    libs at /usr/pgsql-16/lib/, extension files at /usr/pgsql-16/share/extension/.
-      dnf -y install postgresql16-server postgresql16
+      dnf -y install postgresql16-server postgresql16 postgresql16-devel
 
       # 4. Install TimescaleDB, pgvector, and pgvectorscale. The Timescale el8
       #    packagecloud repo is built for PGDG postgresql16 so paths align correctly.
-      dnf -y install timescaledb-2-postgresql-16
+      dnf -y install timescaledb_16
       dnf -y install pgvector_16
-      dnf -y install timescaledb-vector-postgresql-16 || \
-        echo "timescaledb-vector not available in configured repos; skipping"
+      dnf -y install pgvectorscale-postgresql-16 || \
+        echo "pgvectorscale not available in configured repos; skipping"
 
       # 5. Mount the dedicated EBS data volume at /var/lib/pgsql.
       PG_MOUNT_DIR=/var/lib/pgsql
