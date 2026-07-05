@@ -9,7 +9,6 @@
 #   - VPC / private subnets: defined in vpc.tf as resources -> referenced
 #     directly (aws_vpc.main, aws_subnet.private).
 #   - Neo4j security group (ai-rorr-<env>-neo4j-sg): looked up as a data source.
-#   - Neo4j task role (ai-rorr-<env>-neo4j-role): looked up as a data source.
 #   - ai/rorr/<env> secret: reuses the existing data.aws_secretsmanager_secret.rorr
 #     from data.tf (declaring it again here would be a duplicate).
 # ---------------------------------------------------------------------------
@@ -31,9 +30,35 @@ data "aws_security_group" "neo4j" {
   }
 }
 
-# Existing Neo4j task role (application runtime permissions).
-data "aws_iam_role" "neo4j_task" {
-  name = "${local.name_prefix}-neo4j-role"
+# Dedicated ECS task role (application runtime permissions). The existing
+# EC2 instance role (ai-rorr-<env>-neo4j-role) cannot be reused here because
+# its trust policy only allows ec2.amazonaws.com — an ECS task role must be
+# assumable by ecs-tasks.amazonaws.com.
+resource "aws_iam_role" "neo4j_ecs_task" {
+  name = "ai-rorr-develop-neo4j-ecs-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "neo4j_ecs_task_secret" {
+  name = "neo4j-ecs-task-secret-policy"
+  role = aws_iam_role.neo4j_ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = data.aws_secretsmanager_secret.rorr.arn
+    }]
+  })
 }
 
 # ---------------------------------------------------------------------------
@@ -167,7 +192,7 @@ resource "aws_ecs_task_definition" "neo4j" {
   cpu                      = 512
   memory                   = 1024
   execution_role_arn       = aws_iam_role.neo4j_task_exec.arn
-  task_role_arn            = data.aws_iam_role.neo4j_task.arn
+  task_role_arn            = aws_iam_role.neo4j_ecs_task.arn
 
   container_definitions = jsonencode([
     {
