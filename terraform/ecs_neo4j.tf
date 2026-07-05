@@ -35,7 +35,7 @@ data "aws_security_group" "neo4j" {
 # its trust policy only allows ec2.amazonaws.com — an ECS task role must be
 # assumable by ecs-tasks.amazonaws.com.
 resource "aws_iam_role" "neo4j_ecs_task" {
-  name = "ai-rorr-develop-neo4j-ecs-task-role"
+  name = "${local.name_prefix}-neo4j-ecs-task-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
