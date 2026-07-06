@@ -75,6 +75,14 @@ resource "aws_iam_user_policy" "woody_ssm_port_forward" {
 }
 
 # ---------------------------------------------------------------------------
+# CloudWatch read-only access for viewing metrics, alarms and logs.
+# ---------------------------------------------------------------------------
+resource "aws_iam_user_policy_attachment" "woody_cloudwatch_read_only" {
+  user       = aws_iam_user.woody.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"
+}
+
+# ---------------------------------------------------------------------------
 # Store woody's credentials and DB connection target in a dedicated secret.
 # ---------------------------------------------------------------------------
 resource "aws_secretsmanager_secret" "woody_key" {
