@@ -89,6 +89,14 @@ resource "aws_iam_user_policy" "kazel_ssm_port_forward" {
 }
 
 # ---------------------------------------------------------------------------
+# CloudWatch read-only access for viewing metrics, alarms and logs.
+# ---------------------------------------------------------------------------
+resource "aws_iam_user_policy_attachment" "kazel_cloudwatch_read_only" {
+  user       = aws_iam_user.kazel.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess"
+}
+
+# ---------------------------------------------------------------------------
 # Store kazel's credentials and DB connection target in a dedicated secret.
 # ---------------------------------------------------------------------------
 resource "aws_secretsmanager_secret" "kazel_key" {
