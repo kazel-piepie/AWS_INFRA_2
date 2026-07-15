@@ -522,6 +522,30 @@ jobs:
             --secret-string "$UPDATED" \
             --no-cli-pager
 
+      # Add the ai-service ECS descriptor under ecs.ai_service in ai/rorr-infra/{env}.
+      # Read-merge-write: reads the current JSON, sets only .ecs.ai_service and writes
+      # it back, so ecs.backend and every other top-level key are preserved.
+      - name: Update ai/rorr-infra secret with ai-service ECS info
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          AI_ECS=$(terraform output -json -no-color ai_service_ecs)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --argjson ai "$AI_ECS" \
+            '.ecs = ((.ecs // {}) + { ai_service: $ai })')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
       # Update rorr/{env}/database host when DB instance IP changes.
       - name: Update rorr database secret with db host
         if: github.event_name == 'push'

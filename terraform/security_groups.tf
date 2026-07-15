@@ -40,6 +40,15 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.backend_ecs.id]
   }
 
+  # ai-service ECS Fargate tasks connect to the main DB (PostgreSQL 5432).
+  ingress {
+    description     = "PostgreSQL from ai-service ECS tasks"
+    from_port       = var.backend_db_port
+    to_port         = var.backend_db_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ai_ecs.id]
+  }
+
   ingress {
     description     = "PostgreSQL from socket EC2 instances"
     from_port       = 5432
@@ -133,6 +142,15 @@ resource "aws_security_group" "redis" {
     to_port         = 6379
     protocol        = "tcp"
     security_groups = [aws_security_group.backend_ecs.id]
+  }
+
+  # ai-service ECS Fargate tasks cache to Redis (6379).
+  ingress {
+    description     = "Redis from ai-service ECS tasks"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ai_ecs.id]
   }
 
   # Allow Redis access from kafka-ui EC2 used as SSM port-forwarding jump host for dev access.

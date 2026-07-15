@@ -226,6 +226,14 @@ resource "aws_ecs_service" "backend" {
     container_port   = var.backend_container_port
   }
 
+  # Client-side Service Connect: join the private namespace so the backend can
+  # reach the ai-service at the stable name "ai-service" (no server block here;
+  # the backend is a client, it does not advertise itself).
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.rorr_internal.arn
+  }
+
   # CI/CD updates the image/task definition out of band; ignore those drifts.
   lifecycle {
     ignore_changes = [task_definition, desired_count]
