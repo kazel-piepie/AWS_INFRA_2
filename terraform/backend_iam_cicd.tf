@@ -14,6 +14,9 @@ locals {
 
   # ECS service ARN for the backend (scopes UpdateService / DescribeServices).
   backend_service_arn = "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${aws_ecs_cluster.backend.name}/${aws_ecs_service.backend.name}"
+
+  # ECS service ARN for the ai-service (runs in the backend cluster).
+  ai_service_arn = "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${aws_ecs_cluster.backend.name}/${aws_ecs_service.ai.name}"
 }
 
 resource "aws_iam_user" "backend_cicd" {
@@ -53,6 +56,17 @@ data "aws_iam_policy_document" "backend_cicd" {
       "ecs:DescribeServices",
     ]
     resources = [local.backend_service_arn]
+  }
+
+  # --- ECS: update the ai-service (LoL AI companion), rolling deploy only. ---
+  statement {
+    sid    = "DeployAiService"
+    effect = "Allow"
+    actions = [
+      "ecs:UpdateService",
+      "ecs:DescribeServices",
+    ]
+    resources = [local.ai_service_arn]
   }
 
   # RegisterTaskDefinition / DescribeTaskDefinition do not support
@@ -114,6 +128,23 @@ data "aws_iam_policy_document" "backend_cicd" {
     }
   }
 
+  # PassRole limited to the ai-service task execution + task roles, and only to
+  # the ECS tasks service.
+  statement {
+    sid     = "PassAiEcsRoles"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      aws_iam_role.ai_task_execution.arn,
+      aws_iam_role.ai_task.arn,
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+
   # ECR auth token is account-wide (no resource-level support).
   statement {
     sid       = "EcrAuth"
@@ -136,6 +167,22 @@ data "aws_iam_policy_document" "backend_cicd" {
       "ecr:PutImage",
     ]
     resources = [aws_ecr_repository.backend.arn]
+  }
+
+  # ECR push/pull limited to the ai-service repository.
+  statement {
+    sid    = "EcrAiRepo"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:PutImage",
+    ]
+    resources = [aws_ecr_repository.ai.arn]
   }
 
   statement {
