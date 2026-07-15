@@ -67,3 +67,32 @@ variable "backend_session_timeout" {
   type        = number
   default     = 600
 }
+
+# ---------------------------------------------------------------------------
+# ai-service (LoL AI companion) ECS Fargate settings. Runs on the existing
+# backend cluster; reached in-cluster by backend-service via Service Connect.
+# ---------------------------------------------------------------------------
+
+variable "ai_container_port" {
+  description = "Port the ai-service container listens on (Service Connect / SG port)"
+  type        = number
+  default     = 8080
+}
+
+variable "ai_desired_count" {
+  description = "Number of ai-service Fargate tasks to run"
+  type        = number
+  default     = 1
+}
+
+variable "ai_cpu" {
+  description = "Fargate task CPU units for the ai-service (256 = 0.25 vCPU)"
+  type        = number
+  default     = 256
+}
+
+variable "ai_memory" {
+  description = "Fargate task memory (MiB) for the ai-service"
+  type        = number
+  default     = 512
+}
