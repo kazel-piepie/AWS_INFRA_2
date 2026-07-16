@@ -31,5 +31,14 @@ output "ai_service_ecs" {
     ecr_repository  = aws_ecr_repository.ai.name
     container_name  = "ai"
     container_port  = var.ai_container_port
+
+    # Service Connect access info for backend-service to reach the ai-service
+    # in-cluster. Values track the aws_ecs_service.ai service_connect_configuration
+    # and the private DNS namespace, so no hardcoded strings drift from the config.
+    discovery_name = aws_ecs_service.ai.service_connect_configuration[0].service[0].discovery_name
+    dns_name       = aws_ecs_service.ai.service_connect_configuration[0].service[0].client_alias[0].dns_name
+    namespace      = aws_service_discovery_private_dns_namespace.rorr_internal.name
+    port           = var.ai_container_port
+    protocol       = "http"
   }
 }
