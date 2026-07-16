@@ -43,6 +43,11 @@ output "kafka_ui_private_ip" {
   value       = aws_instance.kafka_ui.private_ip
 }
 
+output "kafka_ui_instance_id" {
+  description = "Kafka UI EC2 instance id"
+  value       = aws_instance.kafka_ui.id
+}
+
 output "app_instance_ids" {
   description = "Application tier EC2 instance ids by component"
   value       = { for k, inst in aws_instance.app : k => inst.id }
@@ -75,6 +80,46 @@ output "socket_2_instance_id" {
 output "socket_2_private_ip" {
   description = "Socket server node 2 private IP"
   value       = aws_instance.socket_2.private_ip
+}
+
+output "main_db_private_dns" {
+  description = "Main DB private DNS name"
+  value       = aws_instance.main_db.private_dns
+}
+
+output "kafka_ui_private_dns" {
+  description = "Kafka UI private DNS name"
+  value       = aws_instance.kafka_ui.private_dns
+}
+
+output "socket_1_private_dns" {
+  description = "Socket server node 1 private DNS name"
+  value       = aws_instance.socket_1.private_dns
+}
+
+output "socket_2_private_dns" {
+  description = "Socket server node 2 private DNS name"
+  value       = aws_instance.socket_2.private_dns
+}
+
+output "main_db_availability_zone" {
+  description = "Main DB availability zone"
+  value       = aws_instance.main_db.availability_zone
+}
+
+output "kafka_ui_availability_zone" {
+  description = "Kafka UI availability zone"
+  value       = aws_instance.kafka_ui.availability_zone
+}
+
+output "socket_1_availability_zone" {
+  description = "Socket server node 1 availability zone"
+  value       = aws_instance.socket_1.availability_zone
+}
+
+output "socket_2_availability_zone" {
+  description = "Socket server node 2 availability zone"
+  value       = aws_instance.socket_2.availability_zone
 }
 
 output "socket_alb_dns_name" {
