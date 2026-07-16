@@ -461,11 +461,20 @@ jobs:
           REDIS_PORT=$(terraform output -raw -no-color redis_port)
           MAIN_DB_IP=$(terraform output -raw -no-color main_db_private_ip)
           MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
+          MAIN_DB_DNS=$(terraform output -raw -no-color main_db_private_dns)
+          MAIN_DB_AZ=$(terraform output -raw -no-color main_db_availability_zone)
           KAFKA_UI_IP=$(terraform output -raw -no-color kafka_ui_private_ip)
+          KAFKA_UI_ID=$(terraform output -raw -no-color kafka_ui_instance_id)
+          KAFKA_UI_DNS=$(terraform output -raw -no-color kafka_ui_private_dns)
+          KAFKA_UI_AZ=$(terraform output -raw -no-color kafka_ui_availability_zone)
           SOCKET_1_ID=$(terraform output -raw -no-color socket_1_instance_id)
           SOCKET_1_IP=$(terraform output -raw -no-color socket_1_private_ip)
+          SOCKET_1_DNS=$(terraform output -raw -no-color socket_1_private_dns)
+          SOCKET_1_AZ=$(terraform output -raw -no-color socket_1_availability_zone)
           SOCKET_2_ID=$(terraform output -raw -no-color socket_2_instance_id)
           SOCKET_2_IP=$(terraform output -raw -no-color socket_2_private_ip)
+          SOCKET_2_DNS=$(terraform output -raw -no-color socket_2_private_dns)
+          SOCKET_2_AZ=$(terraform output -raw -no-color socket_2_availability_zone)
           SOCKET_ALB_DNS=$(terraform output -raw -no-color socket_alb_dns_name)
           SOCKET_ALB_ARN=$(terraform output -raw -no-color socket_alb_arn)
           SOCKET_ALB_ZONE=$(terraform output -raw -no-color socket_alb_zone_id)
@@ -484,11 +493,20 @@ jobs:
             --arg redis_p    "$REDIS_PORT" \
             --arg db_ip      "$MAIN_DB_IP" \
             --arg db_id      "$MAIN_DB_ID" \
+            --arg db_dns     "$MAIN_DB_DNS" \
+            --arg db_az      "$MAIN_DB_AZ" \
             --arg kafka_ip   "$KAFKA_UI_IP" \
+            --arg kafka_id   "$KAFKA_UI_ID" \
+            --arg kafka_dns  "$KAFKA_UI_DNS" \
+            --arg kafka_az   "$KAFKA_UI_AZ" \
             --arg s1_id      "$SOCKET_1_ID" \
             --arg s1_ip      "$SOCKET_1_IP" \
+            --arg s1_dns     "$SOCKET_1_DNS" \
+            --arg s1_az      "$SOCKET_1_AZ" \
             --arg s2_id      "$SOCKET_2_ID" \
             --arg s2_ip      "$SOCKET_2_IP" \
+            --arg s2_dns     "$SOCKET_2_DNS" \
+            --arg s2_az      "$SOCKET_2_AZ" \
             --arg alb_dns    "$SOCKET_ALB_DNS" \
             --arg alb_arn    "$SOCKET_ALB_ARN" \
             --arg alb_zone   "$SOCKET_ALB_ZONE" \
@@ -506,10 +524,10 @@ jobs:
                 port: ($redis_p | tonumber)
               }),
               ec2: ((.ec2 // {}) + {
-                main_db:  ((.ec2.main_db  // {}) + { instance_id: $db_id,   private_ip: $db_ip }),
-                kafka_ui: ((.ec2.kafka_ui // {}) + { private_ip: $kafka_ip }),
-                socket_1: ((.ec2.socket_1 // {}) + { instance_id: $s1_id,  private_ip: $s1_ip }),
-                socket_2: ((.ec2.socket_2 // {}) + { instance_id: $s2_id,  private_ip: $s2_ip })
+                main_db:  ((.ec2.main_db  // {}) + { instance_id: $db_id,    private_ip: $db_ip,    private_dns: $db_dns,    availability_zone: $db_az }),
+                kafka_ui: ((.ec2.kafka_ui // {}) + { instance_id: $kafka_id, private_ip: $kafka_ip, private_dns: $kafka_dns, availability_zone: $kafka_az }),
+                socket_1: ((.ec2.socket_1 // {}) + { instance_id: $s1_id,    private_ip: $s1_ip,    private_dns: $s1_dns,    availability_zone: $s1_az }),
+                socket_2: ((.ec2.socket_2 // {}) + { instance_id: $s2_id,    private_ip: $s2_ip,    private_dns: $s2_dns,    availability_zone: $s2_az })
               }),
               alb: ((.alb // {}) + {
                 socket: { dns: $alb_dns, arn: $alb_arn, zone_id: $alb_zone }
