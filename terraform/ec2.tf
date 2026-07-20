@@ -8,20 +8,15 @@ locals {
   EOT
 
   component_setup = {
-    kafka_ui = <<-EOT
-      dnf -y install docker
-      systemctl enable --now docker
-      MSK_BOOTSTRAP=$(grep '^RORR_MSK_BOOTSTRAP_SERVERS=' /etc/rorr/rorr.env | cut -d= -f2-)
-      docker run -d --restart always --name kafka-ui -p 8080:8080 \
-        -e KAFKA_CLUSTERS_0_NAME=rorr \
-        -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS="$MSK_BOOTSTRAP" \
-        -e KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL=SASL_SSL \
-        -e KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM=AWS_MSK_IAM \
-        -e "KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG=software.amazon.msk.auth.iam.IAMLoginModule required;" \
-        -e KAFKA_CLUSTERS_0_PROPERTIES_SASL_CLIENT_CALLBACK_HANDLER_CLASS=software.amazon.msk.auth.iam.IAMClientCallbackHandler \
-        provectuslabs/kafka-ui:latest
-    EOT
-    main_db  = <<-EOT
+    # kafka_ui installs a cloud-init scripts-per-boot hook so a plain reboot
+    # (no instance replacement) re-reads the ai/rorr secret and recreates the
+    # kafka-ui container with the current MSK bootstrap servers. See
+    # user_data/kafka_ui_setup.sh.tftpl for the rationale.
+    kafka_ui = templatefile("${path.module}/user_data/kafka_ui_setup.sh.tftpl", {
+      secret_name = local.secret_name
+      region      = var.region
+    })
+    main_db = <<-EOT
       # Run the Amazon Linux 2023 postgresql16-server (already provided by the AMI's
       # postgresql16-server package). We do NOT install the PGDG RHEL-9 server: it
       # links libldap.so.2, but AL2023 only ships libldap_r-2.4.so.2, so the PGDG
@@ -168,7 +163,7 @@ locals {
       # 6. Enable vectorscale extension in postgres database
       su -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;\"" postgres || true
     EOT
-    neo4j    = <<-EOT
+    neo4j   = <<-EOT
       # 1. Neo4j 5 requires a Java 17 runtime; install the headless Corretto JDK.
       dnf -y install java-17-amazon-corretto-headless
 
