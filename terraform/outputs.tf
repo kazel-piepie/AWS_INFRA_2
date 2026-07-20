@@ -14,8 +14,13 @@ output "public_subnet_ids" {
 }
 
 output "msk_bootstrap_brokers" {
-  description = "MSK plaintext bootstrap broker connection string"
-  value       = aws_msk_cluster.main.bootstrap_brokers
+  # The cluster is SASL/IAM-only (client_broker = TLS, sasl.iam = true), so the
+  # plaintext bootstrap_brokers attribute is always empty. Consumers (kafka-ui,
+  # backend) authenticate exclusively over SASL/IAM on port 9098, so expose the
+  # sasl_iam endpoints here. This output feeds ai/rorr.msk_bootstrap_servers and
+  # ai/rorr-infra.msk.bootstrap_brokers_iam via the terraform workflow.
+  description = "MSK SASL/IAM bootstrap broker connection string (port 9098)"
+  value       = aws_msk_cluster.main.bootstrap_brokers_sasl_iam
 }
 
 output "msk_bootstrap_brokers_tls" {
