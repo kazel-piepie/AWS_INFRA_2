@@ -152,6 +152,30 @@ resource "aws_iam_role_policy_attachment" "backend_task_ses_send" {
   policy_arn = aws_iam_policy.backend_ses_send.arn
 }
 
+# ECS Exec (enable_execute_command) opens an SSM session channel into the
+# running container for debugging / connectivity testing. The SSM messages
+# API actions do not support resource-level permissions, so Resource must be
+# "*". Granted on the task role (the identity the SSM agent runs under).
+data "aws_iam_policy_document" "backend_ecs_exec" {
+  statement {
+    sid    = "AllowEcsExecSsmMessages"
+    effect = "Allow"
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "backend_ecs_exec" {
+  name   = "${local.name_prefix}-backend-ecs-exec"
+  role   = aws_iam_role.backend_task.id
+  policy = data.aws_iam_policy_document.backend_ecs_exec.json
+}
+
 # ---------------------------------------------------------------------------
 # Task definition.
 # ---------------------------------------------------------------------------
@@ -213,6 +237,10 @@ resource "aws_ecs_service" "backend" {
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.backend_desired_count
   launch_type     = "FARGATE"
+
+  # Allow ECS Exec (aws ecs execute-command) into the running container for
+  # debugging / connectivity testing. Takes effect on the next deployment.
+  enable_execute_command = true
 
   network_configuration {
     subnets          = aws_subnet.private[*].id
