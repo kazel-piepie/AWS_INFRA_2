@@ -96,3 +96,38 @@ variable "ai_memory" {
   type        = number
   default     = 512
 }
+
+# ---------------------------------------------------------------------------
+# rorr-lol-object-simulator ECS Fargate settings. Always-on module fronted by
+# its own internet-facing ALB (see alb_simulator.tf).
+# ---------------------------------------------------------------------------
+
+variable "simulator_container_port" {
+  description = "Port the object-simulator container listens on (target group / SG port)"
+  type        = number
+  default     = 3000
+}
+
+variable "simulator_desired_count" {
+  description = "Number of object-simulator Fargate tasks to run (always-on)"
+  type        = number
+  default     = 1
+}
+
+variable "simulator_cpu" {
+  description = "Fargate task CPU units for the object-simulator (256 = 0.25 vCPU)"
+  type        = number
+  default     = 256
+}
+
+variable "simulator_memory" {
+  description = "Fargate task memory (MiB) for the object-simulator"
+  type        = number
+  default     = 512
+}
+
+variable "simulator_health_check_path" {
+  description = "ALB target group health check path for the object-simulator"
+  type        = string
+  default     = "/health"
+}

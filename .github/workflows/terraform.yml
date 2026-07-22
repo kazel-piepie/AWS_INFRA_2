@@ -627,4 +627,56 @@ jobs:
             --region "${AWS_REGION}" \
             --secret-string "$UPDATED" \
             --no-cli-pager
+
+      # Add the object-events topics to rorr/{env}/kafka .topics. Read-merge-write:
+      # only the two new keys are set, so every existing topic entry is preserved.
+      - name: Update rorr kafka secret with object-event topics
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          TOPICS=$(terraform output -json -no-color lol_object_event_topics)
+          OBJ_EVENTS=$(echo "$TOPICS" | jq -r '.object_events')
+          OBJ_EVENTS_DLQ=$(echo "$TOPICS" | jq -r '.object_events_dlq')
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/kafka" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg oe "$OBJ_EVENTS" \
+            --arg dlq "$OBJ_EVENTS_DLQ" \
+            '.topics = ((.topics // {}) + { "object-events": $oe, "object-events-dlq": $dlq })')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/kafka" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Add the object-relay / object-simulator service ARNs to
+      # rorr/{env}/ecs-services .services. Read-merge-write: only the two new
+      # keys are set, so every existing service entry is preserved.
+      - name: Update rorr ecs-services secret with object service ARNs
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          RELAY_ARN=$(terraform output -raw -no-color lol_object_relay_service_arn)
+          SIM_ARN=$(terraform output -raw -no-color lol_object_simulator_service_arn)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/ecs-services" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg relay "$RELAY_ARN" \
+            --arg sim "$SIM_ARN" \
+            '.services = ((.services // {}) + { "rorr-lol-object-relay": $relay, "rorr-lol-object-simulator": $sim })')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/ecs-services" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
 # trigger: sync secrets
