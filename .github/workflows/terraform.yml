@@ -629,7 +629,11 @@ jobs:
             --no-cli-pager
 
       # Add the object-events topics to rorr/{env}/kafka .topics. Read-merge-write:
-      # only the two new keys are set, so every existing topic entry is preserved.
+      # the two new rorr-lol- prefixed keys are set and every other existing topic
+      # entry is preserved. The old prefix-less keys (object-events,
+      # object-events-dlq) are explicitly deleted first so stale entries do not
+      # linger. del() on a missing key is a no-op, so this stays idempotent across
+      # repeated applies.
       - name: Update rorr kafka secret with object-event topics
         if: github.event_name == 'push'
         run: |
@@ -646,7 +650,8 @@ jobs:
           UPDATED=$(echo "$CURRENT" | jq \
             --arg oe "$OBJ_EVENTS" \
             --arg dlq "$OBJ_EVENTS_DLQ" \
-            '.topics = ((.topics // {}) + { "object-events": {"name": $oe}, "object-events-dlq": {"name": $dlq} })')
+            '((.topics // {}) | del(.["object-events"], .["object-events-dlq"])) as $cleaned
+             | .topics = ($cleaned + { "rorr-lol-object-events": {"name": $oe}, "rorr-lol-object-events-dlq": {"name": $dlq} })')
 
           aws secretsmanager put-secret-value \
             --secret-id "rorr/${ENV}/kafka" \
