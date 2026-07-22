@@ -15,6 +15,11 @@ locals {
     "rorr-lol-context-store",
     "rorr-lol-context-deliverer",
     "rorr-lol-meta-collector",
+    # Consumes rorr-lol-processed, reads game_combat_event from the DB, and
+    # produces object-events / object-events-dlq. desired_count = 0; the
+    # collector scales it up during live games (see the SelfScale statement,
+    # which targets local.lol_all_service_arns and so already covers this).
+    "rorr-lol-object-relay",
   ])
 
   # Existing backend cluster - referenced, never recreated.

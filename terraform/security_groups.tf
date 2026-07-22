@@ -49,6 +49,15 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.ai_ecs.id]
   }
 
+  # object-simulator ECS Fargate task reads game_combat_event / live_game (5432).
+  ingress {
+    description     = "PostgreSQL from object-simulator ECS task"
+    from_port       = var.backend_db_port
+    to_port         = var.backend_db_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sim_ecs.id]
+  }
+
   ingress {
     description     = "PostgreSQL from socket EC2 instances"
     from_port       = 5432
@@ -151,6 +160,15 @@ resource "aws_security_group" "redis" {
     to_port         = 6379
     protocol        = "tcp"
     security_groups = [aws_security_group.ai_ecs.id]
+  }
+
+  # object-simulator ECS Fargate task caches to Redis (6379).
+  ingress {
+    description     = "Redis from object-simulator ECS task"
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sim_ecs.id]
   }
 
   # Allow Redis access from kafka-ui EC2 used as SSM port-forwarding jump host for dev access.
@@ -265,6 +283,16 @@ resource "aws_security_group" "msk" {
     security_groups = [aws_security_group.backend_ecs.id]
   }
 
+  # object-simulator produces object-events over SASL/IAM (9098). The cluster is
+  # IAM-only, so 9092/9094 are unreachable and intentionally not opened here.
+  ingress {
+    description     = "Kafka IAM auth from object-simulator ECS task"
+    from_port       = 9098
+    to_port         = 9098
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sim_ecs.id]
+  }
+
   ingress {
     description     = "Kafka IAM auth from Kafka UI"
     from_port       = 9098
@@ -337,5 +365,63 @@ resource "aws_security_group" "socket_ec2" {
 
   tags = {
     Name = "${local.name_prefix}-socket-ec2-sg"
+  }
+}
+
+# object-simulator internet-facing ALB. HTTPS (443) inbound; all outbound.
+# NOTE: ingress is 0.0.0.0/0 as a placeholder. The operator MUST narrow this to
+# the real allow-list CIDRs before relying on it in the open internet - the
+# actual allow-list IPs are unknown at authoring time so they are not guessed.
+resource "aws_security_group" "sim_alb" {
+  name        = "${local.name_prefix}-sim-alb-sg"
+  description = "RORR object-simulator ALB internet facing HTTPS only"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "HTTPS from anywhere (placeholder - narrow to allow-list CIDRs)"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-sim-alb-sg"
+  }
+}
+
+# object-simulator ECS Fargate task. Inbound only from the simulator ALB on the
+# container port (3000); all outbound (reaches MSK / DB / Redis via NAT).
+resource "aws_security_group" "sim_ecs" {
+  name        = "${local.name_prefix}-sim-ecs-sg"
+  description = "RORR object-simulator ECS Fargate task"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "App traffic from object-simulator ALB"
+    from_port       = var.simulator_container_port
+    to_port         = var.simulator_container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sim_alb.id]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-sim-ecs-sg"
   }
 }

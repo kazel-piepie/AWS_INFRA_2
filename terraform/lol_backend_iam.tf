@@ -40,6 +40,8 @@ locals {
     "rorr-lol-context-store"       = aws_iam_role.rorr_lol_context_store_task_role
     "rorr-lol-context-deliverer"   = aws_iam_role.rorr_lol_context_deliverer_task_role
     "rorr-lol-meta-collector"      = aws_iam_role.rorr_lol_meta_collector_task_role
+    "rorr-lol-object-relay"        = aws_iam_role.rorr_lol_object_relay_task_role
+    "rorr-lol-object-simulator"    = aws_iam_role.rorr_lol_object_simulator_task_role
   }
 }
 
@@ -623,4 +625,122 @@ resource "aws_iam_role_policy" "rorr_lol_meta_collector_task_policy" {
   name   = "rorr-lol-meta-collector-task-policy"
   role   = aws_iam_role.rorr_lol_meta_collector_task_role.id
   policy = data.aws_iam_policy_document.rorr_lol_meta_collector.json
+}
+
+# --- rorr-lol-object-relay --------------------------------------------------
+# Consumer module (same pattern as the other 8). Consumes rorr-lol-processed,
+# reads game_combat_event from the main DB (DB access is credential-based via
+# the database secret + the shared backend ECS SG network path, exactly like
+# every other module - there is no IAM-level DB permission), and produces
+# object-events / object-events-dlq. Reads the kafka + database secrets, both
+# covered by the rorr/${var.env}/* AppSecrets grant.
+resource "aws_iam_role" "rorr_lol_object_relay_task_role" {
+  name               = "rorr-lol-object-relay-task-role"
+  assume_role_policy = data.aws_iam_policy_document.backend_ecs_assume.json
+
+  tags = {
+    Name      = "rorr-lol-object-relay-task-role"
+    Component = "lol-backend"
+  }
+}
+
+data "aws_iam_policy_document" "rorr_lol_object_relay" {
+  statement {
+    sid       = "MskConnect"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:CreateTopic"]
+    resources = [aws_msk_cluster.main.arn]
+  }
+  statement {
+    sid       = "TopicProcessedConsume"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "TopicObjectEventsProduce"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "Logs"
+    effect    = "Allow"
+    actions   = ["logs:*"]
+    resources = [local.lol_log_group_arns["rorr-lol-object-relay"]]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
+  }
+  statement {
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "rorr_lol_object_relay_task_policy" {
+  name   = "rorr-lol-object-relay-task-policy"
+  role   = aws_iam_role.rorr_lol_object_relay_task_role.id
+  policy = data.aws_iam_policy_document.rorr_lol_object_relay.json
+}
+
+# --- rorr-lol-object-simulator ----------------------------------------------
+# Always-on module (desired_count = 1) fronted by its own internet-facing ALB
+# (see alb_simulator.tf). Produces object-events / object-events-dlq only (no
+# consume), reads game_combat_event + live_game from the main DB and caches to
+# Redis. DB and Redis access are credential-based via the database / redis
+# secrets + the simulator ECS SG network path (no IAM-level DB/Redis actions).
+# The kafka + database + redis secrets are all covered by rorr/${var.env}/*.
+resource "aws_iam_role" "rorr_lol_object_simulator_task_role" {
+  name               = "rorr-lol-object-simulator-task-role"
+  assume_role_policy = data.aws_iam_policy_document.backend_ecs_assume.json
+
+  tags = {
+    Name      = "rorr-lol-object-simulator-task-role"
+    Component = "lol-backend"
+  }
+}
+
+data "aws_iam_policy_document" "rorr_lol_object_simulator" {
+  statement {
+    sid       = "MskConnect"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:CreateTopic"]
+    resources = [aws_msk_cluster.main.arn]
+  }
+  statement {
+    sid       = "TopicObjectEventsProduce"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:WriteData", "kafka-cluster:WriteDataIdempotently"]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "Logs"
+    effect    = "Allow"
+    actions   = ["logs:*"]
+    resources = ["arn:aws:logs:${local.region_id}:${local.account_id}:log-group:/ecs/rorr-lol-object-simulator:*"]
+  }
+  statement {
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "rorr_lol_object_simulator_task_policy" {
+  name   = "rorr-lol-object-simulator-task-policy"
+  role   = aws_iam_role.rorr_lol_object_simulator_task_role.id
+  policy = data.aws_iam_policy_document.rorr_lol_object_simulator.json
 }
