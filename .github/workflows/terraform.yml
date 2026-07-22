@@ -646,7 +646,7 @@ jobs:
           UPDATED=$(echo "$CURRENT" | jq \
             --arg oe "$OBJ_EVENTS" \
             --arg dlq "$OBJ_EVENTS_DLQ" \
-            '.topics = ((.topics // {}) + { "object-events": $oe, "object-events-dlq": $dlq })')
+            '.topics = ((.topics // {}) + { "object-events": {"name": $oe}, "object-events-dlq": {"name": $dlq} })')
 
           aws secretsmanager put-secret-value \
             --secret-id "rorr/${ENV}/kafka" \
@@ -672,7 +672,7 @@ jobs:
           UPDATED=$(echo "$CURRENT" | jq \
             --arg relay "$RELAY_ARN" \
             --arg sim "$SIM_ARN" \
-            '.services = ((.services // {}) + { "rorr-lol-object-relay": $relay, "rorr-lol-object-simulator": $sim })')
+            '.services = ((.services // {}) + { "rorr-lol-object-relay": {"serviceArn": $relay}, "rorr-lol-object-simulator": {"serviceArn": $sim} })')
 
           aws secretsmanager put-secret-value \
             --secret-id "rorr/${ENV}/ecs-services" \
