@@ -18,20 +18,35 @@
 # ---------------------------------------------------------------------------
 
 locals {
-  # The 8 LOL backend service ARNs (UpdateService / DescribeServices targets).
+  # LOL backend service ARNs (UpdateService / DescribeServices targets).
   # Built from the cluster name + exact service names, mirroring the existing
   # local.lol_collector_service_arn pattern in lol_backend_iam.tf.
-  datacenter_cicd_service_arns = [
-    for name in local.lol_modules :
-    "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/${name}"
-  ]
+  #
+  # The dynamic list covers every member of local.lol_modules (incl.
+  # rorr-lol-object-relay). rorr-lol-object-simulator is a standalone resource
+  # (aws_ecs_service.object_simulator), so it is NOT part of local.lol_modules
+  # and must be appended explicitly. It runs on the same backend cluster, so
+  # the .id reference yields the correct service ARN.
+  datacenter_cicd_service_arns = concat(
+    [
+      for name in local.lol_modules :
+      "arn:aws:ecs:${local.region_id}:${local.account_id}:service/${local.lol_cluster_name}/${name}"
+    ],
+    [aws_ecs_service.object_simulator.id],
+  )
 
-  # Task definition ARNs (any revision) for the 8 services. RunTask is scoped to
-  # these. family == service name (see aws_ecs_task_definition.lol).
-  datacenter_cicd_task_definition_arns = [
-    for name in local.lol_modules :
-    "arn:aws:ecs:${local.region_id}:${local.account_id}:task-definition/${name}:*"
-  ]
+  # Task definition ARNs (any revision) for the services above. RunTask is
+  # scoped to these. family == service name (see aws_ecs_task_definition.lol).
+  # object-simulator is appended via its family + ":*" so any revision the
+  # CI/CD pipeline registers is covered, matching the backend_iam_cicd.tf
+  # RunTask convention (never a single pinned .arn revision).
+  datacenter_cicd_task_definition_arns = concat(
+    [
+      for name in local.lol_modules :
+      "arn:aws:ecs:${local.region_id}:${local.account_id}:task-definition/${name}:*"
+    ],
+    ["arn:aws:ecs:${local.region_id}:${local.account_id}:task-definition/${aws_ecs_task_definition.object_simulator.family}:*"],
+  )
 
   # All develop RORR ECR repositories the pipeline pushes/pulls.
   datacenter_cicd_ecr_repo_arns = [
