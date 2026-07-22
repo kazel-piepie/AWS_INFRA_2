@@ -646,7 +646,7 @@ jobs:
           UPDATED=$(echo "$CURRENT" | jq \
             --arg oe "$OBJ_EVENTS" \
             --arg dlq "$OBJ_EVENTS_DLQ" \
-            '.topics = ((.topics // {}) + { "object-events": {"name": $oe}, "object-events-dlq": {"name": $dlq} })')
+            '.topics = ((.topics // {}) + { "rorr-lol-object-events": {"name": $oe}, "rorr-lol-object-events-dlq": {"name": $dlq} })')
 
           aws secretsmanager put-secret-value \
             --secret-id "rorr/${ENV}/kafka" \
