@@ -176,6 +176,45 @@ resource "aws_iam_role_policy" "backend_ecs_exec" {
   policy = data.aws_iam_policy_document.backend_ecs_exec.json
 }
 
+# backend-service consumes rorr-lol-object-events / rorr-lol-object-events-dlq
+# over SASL/IAM. Consume-only: Connect on the cluster, ReadData/DescribeTopic
+# scoped to exactly the two object-events topics (no wildcard, no
+# CreateTopic/WriteData), and DescribeGroup/AlterGroup on any consumer group so
+# the app picks its own group name (same group-wildcard pattern as the other
+# consumer modules). Mirrors ai-service's ai-msk-consume inline policy.
+data "aws_iam_policy_document" "backend_task_msk" {
+  statement {
+    sid       = "MskConnect"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:Connect"]
+    resources = [aws_msk_cluster.main.arn]
+  }
+  statement {
+    sid    = "TopicConsume"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:ReadData",
+      "kafka-cluster:DescribeTopic",
+    ]
+    resources = [
+      "${local.msk_topic_arn_prefix}/rorr-lol-object-events",
+      "${local.msk_topic_arn_prefix}/rorr-lol-object-events-dlq",
+    ]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:DescribeGroup", "kafka-cluster:AlterGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "backend_task_msk" {
+  name   = "${local.name_prefix}-backend-msk-consume"
+  role   = aws_iam_role.backend_task.id
+  policy = data.aws_iam_policy_document.backend_task_msk.json
+}
+
 # ---------------------------------------------------------------------------
 # Task definition.
 # ---------------------------------------------------------------------------
