@@ -18,6 +18,11 @@ resource "aws_iam_role_policy_attachment" "socket_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+resource "aws_iam_role_policy_attachment" "socket_cloudwatch" {
+  role       = aws_iam_role.socket.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchFullAccess"
+}
+
 data "aws_iam_policy_document" "socket_secret_read" {
   statement {
     sid    = "ReadRorrSecret"
