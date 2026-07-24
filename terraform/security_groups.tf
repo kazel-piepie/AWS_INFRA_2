@@ -301,6 +301,16 @@ resource "aws_security_group" "msk" {
     security_groups = [aws_security_group.kafka_ui.id]
   }
 
+  # ai-service consumes object-events over SASL/IAM (9098). IAM-only cluster, so
+  # 9092/9094 stay closed for this source.
+  ingress {
+    description     = "Kafka IAM auth from ai-service ECS tasks"
+    from_port       = 9098
+    to_port         = 9098
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ai_ecs.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
