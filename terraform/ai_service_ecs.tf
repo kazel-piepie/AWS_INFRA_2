@@ -136,6 +136,44 @@ resource "aws_iam_role_policy_attachment" "ai_task_secret" {
   policy_arn = aws_iam_policy.rorr_secret_read.arn
 }
 
+# ai-service consumes rorr-lol-object-events / rorr-lol-object-events-dlq over
+# SASL/IAM. Consume-only: Connect on the cluster, ReadData/DescribeTopic scoped
+# to exactly the two object-events topics (no wildcard, no CreateTopic/WriteData),
+# and DescribeGroup/AlterGroup on any consumer group so the app picks its own
+# group name (same group-wildcard pattern as the other consumer modules).
+data "aws_iam_policy_document" "ai_task_msk" {
+  statement {
+    sid       = "MskConnect"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:Connect"]
+    resources = [aws_msk_cluster.main.arn]
+  }
+  statement {
+    sid    = "TopicConsume"
+    effect = "Allow"
+    actions = [
+      "kafka-cluster:ReadData",
+      "kafka-cluster:DescribeTopic",
+    ]
+    resources = [
+      "${local.msk_topic_arn_prefix}/rorr-lol-object-events",
+      "${local.msk_topic_arn_prefix}/rorr-lol-object-events-dlq",
+    ]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:DescribeGroup", "kafka-cluster:AlterGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ai_task_msk" {
+  name   = "${local.name_prefix}-ai-msk-consume"
+  role   = aws_iam_role.ai_task.id
+  policy = data.aws_iam_policy_document.ai_task_msk.json
+}
+
 # ---------------------------------------------------------------------------
 # Task definition. Develop sizing: 256 CPU / 512 MiB (same minimum as backend).
 # DB / Redis credentials are injected as individual environment variables from
@@ -181,6 +219,7 @@ resource "aws_ecs_task_definition" "ai" {
         { name = "REDIS_HOST", valueFrom = "${data.aws_secretsmanager_secret.rorr.arn}:redis_host::" },
         { name = "REDIS_PORT", valueFrom = "${data.aws_secretsmanager_secret.rorr.arn}:redis_port::" },
         { name = "REDIS_PASSWORD", valueFrom = "${data.aws_secretsmanager_secret.rorr.arn}:redis_password::" },
+        { name = "MSK_BOOTSTRAP_SERVERS", valueFrom = "${data.aws_secretsmanager_secret.rorr.arn}:msk_bootstrap_servers::" },
       ]
 
       logConfiguration = {
