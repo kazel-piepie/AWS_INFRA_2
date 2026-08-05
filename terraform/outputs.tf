@@ -147,6 +147,11 @@ output "ollama_availability_zone" {
   value       = aws_instance.ollama.availability_zone
 }
 
+output "ollama_instance_type" {
+  description = "Ollama EC2 instance type"
+  value       = aws_instance.ollama.instance_type
+}
+
 output "socket_alb_dns_name" {
   description = "Socket ALB DNS name"
   value       = aws_lb.socket.dns_name
