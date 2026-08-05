@@ -9,24 +9,29 @@ locals {
   private_subnet_cidrs = [cidrsubnet(var.vpc_cidr, 8, 10), cidrsubnet(var.vpc_cidr, 8, 11)]
 
   # Per-environment EC2 instance types (x86 processors; t3a/m6a are AMD x86).
+  # ollama is fixed at t3a.large across environments per the current model-serving
+  # requirement; revisit per-env sizing when prod serving load is characterized.
   ec2_instance_types = {
     develop = {
       kafka_ui = "t3a.small"
       main_db  = "t3a.medium"
       neo4j    = "t3a.medium"
       socket   = "t3a.small"
+      ollama   = "t3a.large"
     }
     staging = {
       kafka_ui = "t3a.small"
       main_db  = "t3a.large"
       neo4j    = "t3a.large"
       socket   = "t3a.medium"
+      ollama   = "t3a.large"
     }
     prod = {
       kafka_ui = "t3a.medium"
       main_db  = "m6a.xlarge"
       neo4j    = "m6a.large"
       socket   = "m6a.large"
+      ollama   = "t3a.large"
     }
   }
 

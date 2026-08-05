@@ -1,8 +1,9 @@
 # ---------------------------------------------------------------------------
-# Dedicated IAM user "woody" for human access to the DB and Kafka UI instances
-# via SSM. No broad SSM access: woody may open an SSM StartSession
-# port-forwarding tunnel to the main_db and kafka_ui instances, an interactive
-# shell session to the kafka_ui instance only, and manage only its own sessions.
+# Dedicated IAM user "woody" for human access to the DB, Kafka UI and Ollama
+# instances via SSM. No broad SSM access: woody may open an SSM StartSession
+# port-forwarding tunnel to the main_db, kafka_ui and ollama instances, an
+# interactive shell session to the kafka_ui and ollama instances only, and
+# manage only its own sessions.
 # Programmatic (AWS CLI) and console access are both enabled; the access key and
 # console password are stored in Secrets Manager.
 # ---------------------------------------------------------------------------
@@ -38,10 +39,10 @@ resource "aws_iam_user_login_profile" "woody" {
 
 # ---------------------------------------------------------------------------
 # SSM access policy for woody.
-#   - StartPortForwardingSession: port-forwarding tunnel to main_db and kafka_ui
-#     using the two AWS port-forwarding documents.
-#   - StartInteractiveSession: interactive shell session to kafka_ui only (no
-#     document restriction so aws ssm start-session works directly).
+#   - StartPortForwardingSession: port-forwarding tunnel to main_db, kafka_ui
+#     and ollama using the two AWS port-forwarding documents.
+#   - StartInteractiveSession: interactive shell session to kafka_ui and ollama
+#     only (no document restriction so aws ssm start-session works directly).
 #   - Terminate/Resume: only sessions owned by woody (aws:username condition via
 #     the session resource ARN).
 # ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ data "aws_iam_policy_document" "woody_ssm_port_forward" {
     resources = [
       aws_instance.main_db.arn,
       aws_instance.kafka_ui.arn,
+      aws_instance.ollama.arn,
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSession",
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSessionToRemoteHost",
     ]
@@ -64,6 +66,15 @@ data "aws_iam_policy_document" "woody_ssm_port_forward" {
     actions = ["ssm:StartSession"]
     resources = [
       aws_instance.kafka_ui.arn,
+    ]
+  }
+
+  statement {
+    sid     = "StartInteractiveSessionOllama"
+    effect  = "Allow"
+    actions = ["ssm:StartSession"]
+    resources = [
+      aws_instance.ollama.arn,
     ]
   }
 
