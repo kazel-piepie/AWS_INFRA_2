@@ -475,6 +475,10 @@ jobs:
           SOCKET_2_IP=$(terraform output -raw -no-color socket_2_private_ip)
           SOCKET_2_DNS=$(terraform output -raw -no-color socket_2_private_dns)
           SOCKET_2_AZ=$(terraform output -raw -no-color socket_2_availability_zone)
+          OLLAMA_ID=$(terraform output -raw -no-color ollama_instance_id)
+          OLLAMA_IP=$(terraform output -raw -no-color ollama_private_ip)
+          OLLAMA_DNS=$(terraform output -raw -no-color ollama_private_dns)
+          OLLAMA_AZ=$(terraform output -raw -no-color ollama_availability_zone)
           SOCKET_ALB_DNS=$(terraform output -raw -no-color socket_alb_dns_name)
           SOCKET_ALB_ARN=$(terraform output -raw -no-color socket_alb_arn)
           SOCKET_ALB_ZONE=$(terraform output -raw -no-color socket_alb_zone_id)
@@ -507,6 +511,10 @@ jobs:
             --arg s2_ip      "$SOCKET_2_IP" \
             --arg s2_dns     "$SOCKET_2_DNS" \
             --arg s2_az      "$SOCKET_2_AZ" \
+            --arg ollama_id  "$OLLAMA_ID" \
+            --arg ollama_ip  "$OLLAMA_IP" \
+            --arg ollama_dns "$OLLAMA_DNS" \
+            --arg ollama_az  "$OLLAMA_AZ" \
             --arg alb_dns    "$SOCKET_ALB_DNS" \
             --arg alb_arn    "$SOCKET_ALB_ARN" \
             --arg alb_zone   "$SOCKET_ALB_ZONE" \
@@ -527,7 +535,8 @@ jobs:
                 main_db:  ((.ec2.main_db  // {}) + { instance_id: $db_id,    private_ip: $db_ip,    private_dns: $db_dns,    availability_zone: $db_az }),
                 kafka_ui: ((.ec2.kafka_ui // {}) + { instance_id: $kafka_id, private_ip: $kafka_ip, private_dns: $kafka_dns, availability_zone: $kafka_az }),
                 socket_1: ((.ec2.socket_1 // {}) + { instance_id: $s1_id,    private_ip: $s1_ip,    private_dns: $s1_dns,    availability_zone: $s1_az }),
-                socket_2: ((.ec2.socket_2 // {}) + { instance_id: $s2_id,    private_ip: $s2_ip,    private_dns: $s2_dns,    availability_zone: $s2_az })
+                socket_2: ((.ec2.socket_2 // {}) + { instance_id: $s2_id,    private_ip: $s2_ip,    private_dns: $s2_dns,    availability_zone: $s2_az }),
+                ollama:   ((.ec2.ollama   // {}) + { instance_id: $ollama_id, private_ip: $ollama_ip, private_dns: $ollama_dns, availability_zone: $ollama_az })
               }),
               alb: ((.alb // {}) + {
                 socket: { dns: $alb_dns, arn: $alb_arn, zone_id: $alb_zone }

@@ -127,6 +127,26 @@ output "socket_2_availability_zone" {
   value       = aws_instance.socket_2.availability_zone
 }
 
+output "ollama_instance_id" {
+  description = "Ollama EC2 instance id"
+  value       = aws_instance.ollama.id
+}
+
+output "ollama_private_ip" {
+  description = "Ollama private IP"
+  value       = aws_instance.ollama.private_ip
+}
+
+output "ollama_private_dns" {
+  description = "Ollama private DNS name"
+  value       = aws_instance.ollama.private_dns
+}
+
+output "ollama_availability_zone" {
+  description = "Ollama availability zone"
+  value       = aws_instance.ollama.availability_zone
+}
+
 output "socket_alb_dns_name" {
   description = "Socket ALB DNS name"
   value       = aws_lb.socket.dns_name
