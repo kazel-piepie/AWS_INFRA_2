@@ -90,6 +90,13 @@ locals {
 
   specs = local.ec2_instance_types[var.env]
 
+  # AMI is pinned to prevent unintended instance replacement when Amazon releases
+  # a new AL2023 build. Update this value deliberately when upgrading the OS.
+  # Current: al2023-ami-2023.12.20260803.3-kernel-6.1-x86_64
+  # Shared by socket_1, socket_2, kafka_ui, ollama, and the app instances so a
+  # single deliberate edit re-pins them all together.
+  al2023_ami_id_current = "ami-07a5b367e8dc8bd92"
+
   # Application EC2 components — datacenter_collector, lol_data_collector,
   # datacenter_live_events, lol_live_events, and lol_ai have been removed;
   # those workloads now run as ECS Fargate services in lol_backend_ecs.tf.

@@ -435,7 +435,7 @@ locals {
 resource "aws_instance" "app" {
   for_each = local.app_components
 
-  ami                    = data.aws_ami.al2023.id
+  ami                    = local.al2023_ami_id_current
   instance_type          = each.value.instance_type
   subnet_id              = aws_subnet.private[0].id
   vpc_security_group_ids = [aws_security_group.app.id]
@@ -602,7 +602,7 @@ resource "aws_volume_attachment" "neo4j_data" {
 
 # Socket server node 1 — us-east-1a private subnet.
 resource "aws_instance" "socket_1" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = local.al2023_ami_id_current
   instance_type          = local.specs.socket
   subnet_id              = aws_subnet.private[0].id
   vpc_security_group_ids = [aws_security_group.socket_ec2.id]
@@ -634,7 +634,7 @@ resource "aws_instance" "socket_1" {
 
 # Socket server node 2 — us-east-1b private subnet.
 resource "aws_instance" "socket_2" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = local.al2023_ami_id_current
   instance_type          = local.specs.socket
   subnet_id              = aws_subnet.private[1].id
   vpc_security_group_ids = [aws_security_group.socket_ec2.id]
@@ -666,7 +666,7 @@ resource "aws_instance" "socket_2" {
 
 # Kafka UI monitoring host in private subnet.
 resource "aws_instance" "kafka_ui" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = local.al2023_ami_id_current
   instance_type          = local.specs.kafka_ui
   subnet_id              = aws_subnet.private[0].id
   vpc_security_group_ids = [aws_security_group.kafka_ui.id]
@@ -703,7 +703,7 @@ resource "aws_instance" "kafka_ui" {
 # database state). The Ollama runtime itself is installed out of band (see the
 # TODO in local.component_setup["ollama"]).
 resource "aws_instance" "ollama" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = local.al2023_ami_id_current
   instance_type          = local.specs.ollama
   subnet_id              = aws_subnet.private[0].id
   vpc_security_group_ids = [aws_security_group.ollama.id]
