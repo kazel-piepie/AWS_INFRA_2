@@ -332,6 +332,13 @@ locals {
         systemctl restart neo4j
       fi
     EOT
+    ollama  = <<-EOT
+      # Ollama model-serving host. This PR provisions infrastructure only: the
+      # instance runs the RORR base bootstrap (SSM agent + ai/rorr secret fetch)
+      # and nothing else. The Ollama runtime listens on TCP 11434 once installed.
+      #
+      # TODO: Ollama install and model-serving setup (out of scope for this PR).
+    EOT
   }
 
   main_db_sql = <<-EOT
@@ -686,5 +693,42 @@ resource "aws_instance" "kafka_ui" {
   tags = {
     Name      = "${local.name_prefix}-kafka-ui"
     Component = "kafka_ui"
+  }
+}
+
+# Ollama model-serving host in the us-east-1a private subnet. Serves models over
+# TCP 11434 to the ai-service ECS tasks. Model files are re-pullable, so this
+# host uses a single large encrypted root volume rather than a dedicated
+# prevent_destroy data volume like main_db/neo4j (which guard irreplaceable
+# database state). The Ollama runtime itself is installed out of band (see the
+# TODO in local.component_setup["ollama"]).
+resource "aws_instance" "ollama" {
+  ami                    = data.aws_ami.al2023.id
+  instance_type          = local.specs.ollama
+  subnet_id              = aws_subnet.private[0].id
+  vpc_security_group_ids = [aws_security_group.ollama.id]
+  iam_instance_profile   = aws_iam_instance_profile.ec2["ollama"].name
+
+  user_data = templatefile("${path.module}/user_data/bootstrap.sh.tftpl", {
+    secret_name     = local.secret_name
+    region          = var.region
+    component_name  = "ollama"
+    component_setup = local.component_setup["ollama"]
+  })
+
+  metadata_options {
+    http_tokens   = "required"
+    http_endpoint = "enabled"
+  }
+
+  root_block_device {
+    volume_size = 500
+    volume_type = "gp3"
+    encrypted   = true
+  }
+
+  tags = {
+    Name      = "${local.name_prefix}-ollama"
+    Component = "ollama"
   }
 }

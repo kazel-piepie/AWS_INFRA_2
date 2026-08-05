@@ -2,7 +2,7 @@
 locals {
   ec2_role_components = toset(concat(
     keys(local.app_components),
-    ["main_db", "kafka_ui", "neo4j"],
+    ["main_db", "kafka_ui", "neo4j", "ollama"],
   ))
 }
 

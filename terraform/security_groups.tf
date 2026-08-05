@@ -228,6 +228,34 @@ resource "aws_security_group" "kafka_ui" {
   }
 }
 
+# Ollama model-serving host. Inbound only from the ai-service ECS tasks on the
+# Ollama API port (11434); all outbound.
+resource "aws_security_group" "ollama" {
+  name        = "${local.name_prefix}-ollama-sg"
+  description = "RORR Ollama model serving host"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Ollama API from ai-service ECS tasks"
+    from_port       = 11434
+    to_port         = 11434
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ai_ecs.id]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-ollama-sg"
+  }
+}
+
 # MSK (Kafka) brokers.
 resource "aws_security_group" "msk" {
   name        = "${local.name_prefix}-msk-sg"
