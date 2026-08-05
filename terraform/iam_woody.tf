@@ -107,6 +107,31 @@ resource "aws_iam_user_policy_attachment" "woody_cloudwatch_read_only" {
 }
 
 # ---------------------------------------------------------------------------
+# Read-only access to the shared ai/rorr-infra/${env} secret so woody can look
+# up infra inventory values. Scoped to the exact secret ARN (no wildcard) via
+# the pre-existing data source in frontend.tf.
+# ---------------------------------------------------------------------------
+data "aws_iam_policy_document" "woody_rorr_infra_secret_read" {
+  statement {
+    sid    = "ReadRorrInfraSecret"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+    ]
+    resources = [
+      data.aws_secretsmanager_secret.rorr_infra.arn,
+    ]
+  }
+}
+
+resource "aws_iam_user_policy" "woody_rorr_infra_secret_read" {
+  name   = "${local.name_prefix}-woody-rorr-infra-secret-read"
+  user   = aws_iam_user.woody.name
+  policy = data.aws_iam_policy_document.woody_rorr_infra_secret_read.json
+}
+
+# ---------------------------------------------------------------------------
 # Store woody's credentials and DB connection target in a dedicated secret.
 # ---------------------------------------------------------------------------
 resource "aws_secretsmanager_secret" "woody_key" {
