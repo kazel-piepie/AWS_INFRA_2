@@ -167,3 +167,39 @@ resource "aws_iam_role_policy" "kafka_ui_msk" {
   role   = aws_iam_role.ec2["kafka_ui"].id
   policy = data.aws_iam_policy_document.kafka_ui_msk.json
 }
+
+# ollama needs read/write access to the shared deploy bucket, mirroring the
+# socket role's inline s3-deploy policy (list on the bucket, get/put/delete on
+# objects).
+resource "aws_iam_role_policy" "ollama_s3_deploy" {
+  name = "${local.name_prefix}-ollama-s3-deploy"
+  role = aws_iam_role.ec2["ollama"].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "DeployBucketList"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = ["arn:aws:s3:::${local.name_prefix}-deploy"]
+      },
+      {
+        Sid    = "DeployBucketObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+        ]
+        Resource = ["arn:aws:s3:::${local.name_prefix}-deploy/*"]
+      }
+    ]
+  })
+}
+
+# ollama CloudWatch full access, mirroring the socket role attachment.
+resource "aws_iam_role_policy_attachment" "ollama_cloudwatch" {
+  role       = aws_iam_role.ec2["ollama"].name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchFullAccess"
+}
