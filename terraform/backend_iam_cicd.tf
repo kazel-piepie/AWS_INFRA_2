@@ -214,7 +214,7 @@ data "aws_iam_policy_document" "backend_cicd" {
     resources = ["*"]
   }
 
-  # --- SSM Session Manager: open interactive sessions on socket EC2 instances only. ---
+  # --- SSM Session Manager: open interactive sessions on socket + ollama EC2 instances only. ---
   statement {
     sid       = "SSMStartSessionOnSocket"
     effect    = "Allow"
@@ -223,7 +223,10 @@ data "aws_iam_policy_document" "backend_cicd" {
     condition {
       test     = "StringLike"
       variable = "ssm:resourceTag/Name"
-      values   = ["${local.name_prefix}-socket-*"]
+      values = [
+        "${local.name_prefix}-socket-*",
+        "${local.name_prefix}-ollama",
+      ]
     }
   }
 
@@ -260,7 +263,7 @@ data "aws_iam_policy_document" "backend_cicd" {
     resources = ["*"]
   }
 
-  # --- SSM Run Command: execute programs on socket EC2 instances. ---
+  # --- SSM Run Command: execute programs on socket + ollama EC2 instances. ---
   statement {
     sid       = "SSMSendCommandToSocket"
     effect    = "Allow"
@@ -269,7 +272,10 @@ data "aws_iam_policy_document" "backend_cicd" {
     condition {
       test     = "StringLike"
       variable = "ssm:resourceTag/Name"
-      values   = ["${local.name_prefix}-socket-*"]
+      values = [
+        "${local.name_prefix}-socket-*",
+        "${local.name_prefix}-ollama",
+      ]
     }
   }
 
