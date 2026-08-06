@@ -9,15 +9,15 @@ locals {
   private_subnet_cidrs = [cidrsubnet(var.vpc_cidr, 8, 10), cidrsubnet(var.vpc_cidr, 8, 11)]
 
   # Per-environment EC2 instance types (x86 processors; t3a/m6a are AMD x86).
-  # ollama is fixed at t3a.large across environments per the current model-serving
-  # requirement; revisit per-env sizing when prod serving load is characterized.
+  # ollama in develop uses g6.xlarge (NVIDIA L4 GPU) for GPU-accelerated model
+  # serving; staging/prod remain t3a.large pending serving-load characterization.
   ec2_instance_types = {
     develop = {
       kafka_ui = "t3a.small"
       main_db  = "t3a.medium"
       neo4j    = "t3a.medium"
       socket   = "t3a.small"
-      ollama   = "t3a.large"
+      ollama   = "g6.xlarge"
     }
     staging = {
       kafka_ui = "t3a.small"
@@ -96,6 +96,10 @@ locals {
   # Shared by socket_1, socket_2, kafka_ui, ollama, and the app instances so a
   # single deliberate edit re-pins them all together.
   al2023_ami_id_current = "ami-07a5b367e8dc8bd92"
+
+  # GPU model-serving host (ollama). Deep Learning Base OSS Nvidia Driver GPU AMI
+  # (Amazon Linux 2023) - NVIDIA driver preinstalled, supports G6.
+  ollama_gpu_ami_id = "ami-07626c4fc6797c8e0"
 
   # Application EC2 components — datacenter_collector, lol_data_collector,
   # datacenter_live_events, lol_live_events, and lol_ai have been removed;
