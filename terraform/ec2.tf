@@ -703,7 +703,7 @@ resource "aws_instance" "kafka_ui" {
 # database state). The Ollama runtime itself is installed out of band (see the
 # TODO in local.component_setup["ollama"]).
 resource "aws_instance" "ollama" {
-  ami                    = local.al2023_ami_id_current
+  ami                    = local.ollama_gpu_ami_id
   instance_type          = local.specs.ollama
   subnet_id              = aws_subnet.private[0].id
   vpc_security_group_ids = [aws_security_group.ollama.id]
