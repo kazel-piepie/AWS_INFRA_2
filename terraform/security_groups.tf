@@ -251,6 +251,22 @@ resource "aws_security_group" "ollama" {
     security_groups = [aws_security_group.ai_ecs.id]
   }
 
+  ingress {
+    description     = "App port 8080 from ai-service ECS tasks"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ai_ecs.id]
+  }
+
+  ingress {
+    description     = "App port 8080 from socket EC2 instances"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.socket_ec2.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
