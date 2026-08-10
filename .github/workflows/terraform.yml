@@ -20,10 +20,12 @@ permissions:
 jobs:
   terraform:
     runs-on: ubuntu-latest
-    # Branch name doubles as the environment name (develop/staging/prod).
-    environment: ${{ github.ref_name }}
+    # The target branch doubles as the environment name (develop/staging/prod).
+    # On pull_request, github.ref_name is "<PR#>/merge", so use github.base_ref
+    # (the PR target branch); on push it is the branch name itself.
+    environment: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
     env:
-      ENV: ${{ github.ref_name }}
+      ENV: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       TF_IN_AUTOMATION: "true"
     defaults:
