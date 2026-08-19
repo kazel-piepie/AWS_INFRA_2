@@ -66,6 +66,15 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.socket_ec2.id]
   }
 
+  # Neo4j ECS Fargate tasks connect to the main DB (PostgreSQL 5432).
+  ingress {
+    description     = "PostgreSQL from neo4j ECS tasks"
+    from_port       = var.backend_db_port
+    to_port         = var.backend_db_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.neo4j.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
@@ -107,6 +116,17 @@ resource "aws_security_group" "neo4j" {
     to_port         = 7687
     protocol        = "tcp"
     security_groups = [aws_security_group.socket_ec2.id]
+  }
+
+  # Neo4j ECS Fargate tasks (rorr-lol-datacenter-neo4j) share this SG and need
+  # Bolt access to the Neo4j EC2 instance. self = true covers all resources
+  # attached to this SG (both the EC2 host and the ECS task).
+  ingress {
+    description = "Bolt from neo4j ECS tasks (self)"
+    from_port   = 7687
+    to_port     = 7687
+    protocol    = "tcp"
+    self        = true
   }
 
   ingress {
