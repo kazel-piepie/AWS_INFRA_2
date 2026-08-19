@@ -17,9 +17,11 @@
 # Data sources — existing resources referenced, not recreated.
 # ---------------------------------------------------------------------------
 
-# Application secrets consumed by the Neo4j ECS task at runtime.
-# rorr/develop/database: reuses the data source declared in lol_backend_iam.tf.
-# rorr/develop/neo4j:    dedicated data source declared here (not used elsewhere).
+# Application secrets read directly by the Neo4j ECS task at runtime via the
+# AWS SDK (src/config/secrets.ts). The task role grants GetSecretValue; these
+# are NOT injected via the execution role or the task definition secrets block.
+# rorr/<env>/database: reuses the data source declared in lol_backend_iam.tf.
+# rorr/<env>/neo4j:    dedicated data source declared here (not used elsewhere).
 data "aws_secretsmanager_secret" "neo4j_app" {
   name = "rorr/${var.env}/neo4j"
 }
@@ -135,8 +137,10 @@ resource "aws_iam_role_policy_attachment" "neo4j_task_exec_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Inline policy: read only the two secrets this workload needs (exact ARNs,
-# no wildcards) for secret injection into the container.
+# Inline policy: read only the two secrets the ECS agent needs to inject at
+# container start (ai/rorr/<env> for RORR_SECRET_JSON, ecs-services/neo4j for
+# CI/CD targeting). App secrets (database, neo4j) are read at runtime by the
+# task role — the execution role does not need them.
 data "aws_iam_policy_document" "neo4j_task_exec_secrets" {
   statement {
     sid    = "ReadNeo4jTaskSecrets"
@@ -145,10 +149,8 @@ data "aws_iam_policy_document" "neo4j_task_exec_secrets" {
       "secretsmanager:GetSecretValue",
     ]
     resources = [
-      data.aws_secretsmanager_secret.rorr.arn,              # ai/rorr/<env>
-      aws_secretsmanager_secret.neo4j_ecs.arn,              # rorr/<env>/ecs-services/neo4j
-      data.aws_secretsmanager_secret.rorr_lol_database.arn, # rorr/<env>/database
-      data.aws_secretsmanager_secret.neo4j_app.arn,         # rorr/<env>/neo4j
+      data.aws_secretsmanager_secret.rorr.arn, # ai/rorr/<env>
+      aws_secretsmanager_secret.neo4j_ecs.arn, # rorr/<env>/ecs-services/neo4j
     ]
   }
 }
@@ -214,10 +216,9 @@ resource "aws_ecs_task_definition" "neo4j" {
       essential = true
 
       # Full secret ARN in valueFrom (never ARN#key) per infra rules.
+      # App secrets (database, neo4j) are read at runtime via AWS SDK — not injected here.
       secrets = [
-        { name = "RORR_SECRET_JSON",     valueFrom = data.aws_secretsmanager_secret.rorr.arn },
-        { name = "DATABASE_SECRET_JSON", valueFrom = data.aws_secretsmanager_secret.rorr_lol_database.arn },
-        { name = "NEO4J_SECRET_JSON",    valueFrom = data.aws_secretsmanager_secret.neo4j_app.arn },
+        { name = "RORR_SECRET_JSON", valueFrom = data.aws_secretsmanager_secret.rorr.arn },
       ]
 
       logConfiguration = {
