@@ -131,6 +131,22 @@ resource "aws_iam_role_policy_attachment" "teams_bot_exec_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "teams_bot_exec_secrets" {
+  name = "${local.name_prefix}-teams-bot-exec-secrets"
+  role = aws_iam_role.teams_bot_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["secretsmanager:GetSecretValue"]
+      Resource = [
+        aws_secretsmanager_secret.neo4j_reader.arn,
+      ]
+    }]
+  })
+}
+
 # ---------------------------------------------------------------------------
 # Task role (application runtime reads the teams bot secrets from SM).
 # ---------------------------------------------------------------------------
