@@ -180,7 +180,9 @@ resource "aws_secretsmanager_secret_version" "neo4j_ecs" {
   secret_string = jsonencode({
     ecr_repository_url = aws_ecr_repository.neo4j.repository_url
     ecs_cluster_name   = aws_ecs_cluster.neo4j.name
-    ecs_service_name   = "rorr-lol-datacenter-neo4j"
+    ecs_services = {
+      neo4j_datacenter = "rorr-lol-datacenter-neo4j"
+    }
   })
 }
 
