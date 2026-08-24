@@ -75,6 +75,15 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.neo4j.id]
   }
 
+  # Teams Bot ECS Fargate tasks read the main DB (PostgreSQL 5432).
+  ingress {
+    description     = "PostgreSQL from teams bot ECS tasks"
+    from_port       = var.backend_db_port
+    to_port         = var.backend_db_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.teams_bot.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
@@ -127,6 +136,14 @@ resource "aws_security_group" "neo4j" {
     to_port     = 7687
     protocol    = "tcp"
     self        = true
+  }
+
+  ingress {
+    description     = "Bolt from teams bot ECS tasks"
+    from_port       = 7687
+    to_port         = 7687
+    protocol        = "tcp"
+    security_groups = [aws_security_group.teams_bot.id]
   }
 
   ingress {
@@ -505,5 +522,60 @@ resource "aws_security_group" "sim_ecs" {
 
   tags = {
     Name = "${local.name_prefix}-sim-ecs-sg"
+  }
+}
+
+# Teams Bot internet-facing ALB. HTTPS (443) inbound; all outbound.
+resource "aws_security_group" "teams_bot_alb" {
+  name        = "${local.name_prefix}-teams-bot-alb-sg"
+  description = "RORR Teams Bot ALB internet facing HTTPS only"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-teams-bot-alb-sg"
+  }
+}
+
+# Teams Bot ECS Fargate task. Inbound only from the teams bot ALB on the
+# container port (3000); all outbound (reaches Neo4j / DB / secrets via NAT).
+resource "aws_security_group" "teams_bot" {
+  name        = "${local.name_prefix}-teams-bot-sg"
+  description = "RORR Teams Bot ECS Fargate task"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "App traffic from teams bot ALB"
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.teams_bot_alb.id]
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-teams-bot-sg"
   }
 }
