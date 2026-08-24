@@ -24,6 +24,10 @@ resource "aws_secretsmanager_secret_version" "neo4j_reader" {
     username = ""
     password = ""
   })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 resource "aws_secretsmanager_secret" "db_reader" {
@@ -43,8 +47,16 @@ resource "aws_secretsmanager_secret_version" "db_reader" {
     port     = 5432
     username = ""
     password = ""
-    database = ""
+    sslmode  = "disable"
+    databases = {
+      rorr_datacenter  = "rorr_datacenter"
+      rorr_lol_service = "rorr_lol_service"
+    }
   })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 resource "aws_secretsmanager_secret" "teams_bot_app" {
@@ -63,6 +75,10 @@ resource "aws_secretsmanager_secret_version" "teams_bot_app" {
     teams_bot_id     = ""
     teams_bot_secret = ""
   })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 resource "aws_secretsmanager_secret" "teams_bot_ecs" {
