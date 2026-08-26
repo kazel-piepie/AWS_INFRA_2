@@ -84,6 +84,15 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.teams_bot.id]
   }
 
+  # Ollama EC2 host connects to the main DB (PostgreSQL 5432).
+  ingress {
+    description     = "PostgreSQL from ollama EC2"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ollama.id]
+  }
+
   egress {
     description = "All outbound"
     from_port   = 0
