@@ -16,7 +16,7 @@ resource "aws_lb" "teams_bot" {
 }
 
 resource "aws_lb_target_group" "teams_bot" {
-  name        = "${local.name_prefix}-teams-bot-tg"
+  name_prefix = "aitb-"
   port        = 3978
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
