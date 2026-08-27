@@ -190,6 +190,21 @@ data "aws_iam_policy_document" "teams_bot_task_secret" {
       aws_secretsmanager_secret.teams_bot_app.arn,
     ]
   }
+
+  statement {
+    sid    = "BedrockInvokeHaiku"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+    ]
+    resources = [
+      "arn:aws:bedrock:us-east-1:161327178737:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "teams_bot_task_secret" {
