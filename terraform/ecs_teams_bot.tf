@@ -242,7 +242,7 @@ resource "aws_ecs_task_definition" "teams_bot" {
 
       portMappings = [
         {
-          containerPort = 3000
+          containerPort = 3978
           protocol      = "tcp"
         }
       ]
@@ -285,7 +285,7 @@ resource "aws_ecs_service" "teams_bot" {
   load_balancer {
     target_group_arn = aws_lb_target_group.teams_bot.arn
     container_name   = "rorr-lol-teams-bot"
-    container_port   = 3000
+    container_port   = 3978
   }
 
   depends_on = [aws_lb_listener.teams_bot_https]

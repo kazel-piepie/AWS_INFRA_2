@@ -562,7 +562,7 @@ resource "aws_security_group" "teams_bot_alb" {
 }
 
 # Teams Bot ECS Fargate task. Inbound only from the teams bot ALB on the
-# container port (3000); all outbound (reaches Neo4j / DB / secrets via NAT).
+# container port (3978); all outbound (reaches Neo4j / DB / secrets via NAT).
 resource "aws_security_group" "teams_bot" {
   name        = "${local.name_prefix}-teams-bot-sg"
   description = "RORR Teams Bot ECS Fargate task"
@@ -570,8 +570,8 @@ resource "aws_security_group" "teams_bot" {
 
   ingress {
     description     = "App traffic from teams bot ALB"
-    from_port       = 3000
-    to_port         = 3000
+    from_port       = 3978
+    to_port         = 3978
     protocol        = "tcp"
     security_groups = [aws_security_group.teams_bot_alb.id]
   }
