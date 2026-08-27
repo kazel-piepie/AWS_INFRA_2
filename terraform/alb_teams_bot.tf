@@ -34,6 +34,10 @@ resource "aws_lb_target_group" "teams_bot" {
     Name      = "${local.name_prefix}-teams-bot-tg"
     Component = "teams-bot"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lb_listener" "teams_bot_https" {
