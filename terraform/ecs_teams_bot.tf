@@ -203,10 +203,10 @@ data "aws_iam_policy_document" "teams_bot_task_secret" {
       "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
       "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
       "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
-      "arn:aws:bedrock:us-east-1:161327178737:inference-profile/us.anthropic.claude-sonnet-4-6-20251001-v1:0",
-      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6-20251001-v1:0",
-      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6-20251001-v1:0",
-      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1:161327178737:inference-profile/us.anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6",
     ]
   }
 }
