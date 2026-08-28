@@ -175,6 +175,35 @@ resource "aws_iam_role_policy" "ai_task_msk" {
 }
 
 # ---------------------------------------------------------------------------
+# Bedrock invoke permission for Claude Haiku via the cross-region inference
+# profile us.anthropic.claude-haiku-4-5-20251001-v1:0. The profile routes
+# through us-east-1 / us-east-2 / us-west-2, so the underlying foundation
+# models in all three regions must be allowed alongside the profile ARN.
+# ---------------------------------------------------------------------------
+data "aws_iam_policy_document" "ai_task_bedrock" {
+  statement {
+    sid    = "BedrockInvokeHaiku"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+    ]
+    resources = [
+      "arn:aws:bedrock:us-east-1:161327178737:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ai_task_bedrock" {
+  name   = "${local.name_prefix}-ai-bedrock-invoke"
+  role   = aws_iam_role.ai_task.id
+  policy = data.aws_iam_policy_document.ai_task_bedrock.json
+}
+
+# ---------------------------------------------------------------------------
 # Task definition. Develop sizing: 256 CPU / 512 MiB (same minimum as backend).
 # DB / Redis credentials are injected as individual environment variables from
 # per-key references into ai/rorr/{env}, matching the live backend task revision.
