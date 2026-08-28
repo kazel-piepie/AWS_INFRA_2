@@ -156,6 +156,22 @@ resource "aws_security_group" "neo4j" {
   }
 
   ingress {
+    description     = "Bolt from ai-service ECS tasks"
+    from_port       = 7687
+    to_port         = 7687
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ai_ecs.id]
+  }
+
+  ingress {
+    description     = "Bolt from ollama EC2"
+    from_port       = 7687
+    to_port         = 7687
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ollama.id]
+  }
+
+  ingress {
     description = "Neo4j HTTP browser from within VPC"
     from_port   = 7474
     to_port     = 7474
