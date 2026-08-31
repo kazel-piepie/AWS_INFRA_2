@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Dedicated IAM user "woody" for human access to the DB, Kafka UI and Ollama
 # instances via SSM. No broad SSM access: woody may open an SSM StartSession
-# port-forwarding tunnel to the main_db, kafka_ui and ollama instances, an
+# port-forwarding tunnel to the main_db, kafka_ui, ollama and neo4j instances, an
 # interactive shell session to the kafka_ui and ollama instances only, and
 # manage only its own sessions.
 # Programmatic (AWS CLI) and console access are both enabled; the access key and
@@ -39,8 +39,8 @@ resource "aws_iam_user_login_profile" "woody" {
 
 # ---------------------------------------------------------------------------
 # SSM access policy for woody.
-#   - StartPortForwardingSession: port-forwarding tunnel to main_db, kafka_ui
-#     and ollama using the two AWS port-forwarding documents.
+#   - StartPortForwardingSession: port-forwarding tunnel to main_db, kafka_ui,
+#     ollama and neo4j using the two AWS port-forwarding documents.
 #   - StartInteractiveSession: interactive shell session to kafka_ui and ollama
 #     only (no document restriction so aws ssm start-session works directly).
 #   - Terminate/Resume: only sessions owned by woody (aws:username condition via
@@ -55,6 +55,7 @@ data "aws_iam_policy_document" "woody_ssm_port_forward" {
       aws_instance.main_db.arn,
       aws_instance.kafka_ui.arn,
       aws_instance.ollama.arn,
+      aws_instance.neo4j.arn,
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSession",
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSessionToRemoteHost",
     ]
