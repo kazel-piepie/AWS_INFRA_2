@@ -42,6 +42,7 @@ locals {
     "rorr-lol-meta-collector"      = aws_iam_role.rorr_lol_meta_collector_task_role
     "rorr-lol-object-relay"        = aws_iam_role.rorr_lol_object_relay_task_role
     "rorr-lol-object-simulator"    = aws_iam_role.rorr_lol_object_simulator_task_role
+    "rorr-lol-win-prob"            = aws_iam_role.rorr_lol_win_prob_task_role
   }
 }
 
@@ -743,4 +744,65 @@ resource "aws_iam_role_policy" "rorr_lol_object_simulator_task_policy" {
   name   = "rorr-lol-object-simulator-task-policy"
   role   = aws_iam_role.rorr_lol_object_simulator_task_role.id
   policy = data.aws_iam_policy_document.rorr_lol_object_simulator.json
+}
+
+# --- rorr-lol-win-prob ------------------------------------------------------
+# Win probability prediction (12th module). Consumes rorr-lol-processed and
+# produces no topic (same pattern as processed-store / object-relay). DB and
+# Redis access are credential-based via the shared ai/rorr/develop secret
+# (db_host, redis_host etc.) over the backend ECS SG network path - there is
+# no IAM-level DB or Redis permission. desired_count = 0.
+resource "aws_iam_role" "rorr_lol_win_prob_task_role" {
+  name               = "rorr-lol-win-prob-task-role"
+  assume_role_policy = data.aws_iam_policy_document.backend_ecs_assume.json
+
+  tags = {
+    Name      = "rorr-lol-win-prob-task-role"
+    Component = "lol-backend"
+  }
+}
+
+data "aws_iam_policy_document" "rorr_lol_win_prob" {
+  statement {
+    sid       = "MskConnect"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:CreateTopic"]
+    resources = [aws_msk_cluster.main.arn]
+  }
+  statement {
+    sid       = "TopicProcessedConsume"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "Logs"
+    effect    = "Allow"
+    actions   = ["logs:*"]
+    resources = [local.lol_log_group_arns["rorr-lol-win-prob"]]
+  }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
+  }
+  statement {
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "rorr_lol_win_prob_task_policy" {
+  name   = "rorr-lol-win-prob-task-policy"
+  role   = aws_iam_role.rorr_lol_win_prob_task_role.id
+  policy = data.aws_iam_policy_document.rorr_lol_win_prob.json
 }
