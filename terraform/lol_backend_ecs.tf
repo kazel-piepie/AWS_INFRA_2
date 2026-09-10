@@ -20,6 +20,12 @@ locals {
     # collector scales it up during live games (see the SelfScale statement,
     # which targets local.lol_all_service_arns and so already covers this).
     "rorr-lol-object-relay",
+    # Win probability prediction. Consumes rorr-lol-processed and produces no
+    # topic; DB/Redis access is credential-based via the shared secret.
+    # desired_count = 0 (started manually / scaled by the collector, which
+    # already covers it via the SelfScale statement over lol_all_service_arns).
+    # Entrypoint resolves to node dist/win-prob via lol_module_entrypoint.
+    "rorr-lol-win-prob",
   ])
 
   # Existing backend cluster - referenced, never recreated.
