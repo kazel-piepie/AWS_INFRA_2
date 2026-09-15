@@ -299,6 +299,13 @@ resource "aws_ecs_service" "ai" {
         port     = var.ai_container_port
         dns_name = "ai-service"
       }
+
+      # Increase Envoy per-request and idle timeouts from the default 15 s to
+      # 300 s so that long-running AI inference requests are not aborted.
+      timeout {
+        per_request_timeout_seconds = 300
+        idle_timeout_seconds        = 300
+      }
     }
 
     log_configuration {
