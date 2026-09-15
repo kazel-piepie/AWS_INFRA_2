@@ -26,6 +26,12 @@ locals {
     # already covers it via the SelfScale statement over lol_all_service_arns).
     # Entrypoint resolves to node dist/win-prob via lol_module_entrypoint.
     "rorr-lol-win-prob",
+    # wGE (win-graph estimation). Consumes rorr-lol-processed; DB read/write
+    # (views, wge_frame, wge_player_game, wge_position_baseline, wge_model,
+    # app_runtime_config) is credential-based via the shared secret; no Redis.
+    # desired_count = 0 (scaled by the collector via lol_all_service_arns).
+    # Entrypoint resolves to node dist/wge via lol_module_entrypoint.
+    "rorr-lol-wge",
   ])
 
   # Existing backend cluster - referenced, never recreated.

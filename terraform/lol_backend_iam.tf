@@ -43,6 +43,7 @@ locals {
     "rorr-lol-object-relay"        = aws_iam_role.rorr_lol_object_relay_task_role
     "rorr-lol-object-simulator"    = aws_iam_role.rorr_lol_object_simulator_task_role
     "rorr-lol-win-prob"            = aws_iam_role.rorr_lol_win_prob_task_role
+    "rorr-lol-wge"                 = aws_iam_role.rorr_lol_wge_task_role
   }
 }
 
@@ -805,4 +806,65 @@ resource "aws_iam_role_policy" "rorr_lol_win_prob_task_policy" {
   name   = "rorr-lol-win-prob-task-policy"
   role   = aws_iam_role.rorr_lol_win_prob_task_role.id
   policy = data.aws_iam_policy_document.rorr_lol_win_prob.json
+}
+
+# --- rorr-lol-wge -----------------------------------------------------------
+# wGE (win-graph estimation). Consumes rorr-lol-processed; DB read/write
+# (v_game_state_frame, v_engagement_features, frames, wge_model,
+# app_runtime_config, wge_frame, wge_player_game, wge_position_baseline)
+# and no Redis — all credential-based via the shared rorr/develop/database
+# secret + the backend ECS SG network path (no IAM-level DB actions).
+resource "aws_iam_role" "rorr_lol_wge_task_role" {
+  name               = "rorr-lol-wge-task-role"
+  assume_role_policy = data.aws_iam_policy_document.backend_ecs_assume.json
+
+  tags = {
+    Name      = "rorr-lol-wge-task-role"
+    Component = "lol-backend"
+  }
+}
+
+data "aws_iam_policy_document" "rorr_lol_wge" {
+  statement {
+    sid       = "MskConnect"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:Connect", "kafka-cluster:WriteDataIdempotently", "kafka-cluster:CreateTopic"]
+    resources = [aws_msk_cluster.main.arn]
+  }
+  statement {
+    sid       = "TopicProcessedConsume"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:CreateTopic", "kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"]
+    resources = ["${local.msk_topic_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "ConsumerGroup"
+    effect    = "Allow"
+    actions   = ["kafka-cluster:AlterGroup", "kafka-cluster:DescribeGroup"]
+    resources = ["${local.msk_group_arn_prefix}/*"]
+  }
+  statement {
+    sid       = "Logs"
+    effect    = "Allow"
+    actions   = ["logs:*"]
+    resources = [local.lol_log_group_arns["rorr-lol-wge"]]
+  }
+  statement {
+    sid       = "EcsServicesSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [data.aws_secretsmanager_secret.rorr_lol_ecs_services.arn]
+  }
+  statement {
+    sid       = "AppSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:aws:secretsmanager:${local.region_id}:${local.account_id}:secret:rorr/${var.env}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "rorr_lol_wge_task_policy" {
+  name   = "rorr-lol-wge-task-policy"
+  role   = aws_iam_role.rorr_lol_wge_task_role.id
+  policy = data.aws_iam_policy_document.rorr_lol_wge.json
 }
