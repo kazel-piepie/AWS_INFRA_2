@@ -1,0 +1,700 @@
+name: rorr-terraform
+
+# Deploy RORR infrastructure. Each protected branch maps to its own GitHub
+# Environment (and therefore its own AWS account credentials and state bucket).
+on:
+  push:
+    branches: [develop, staging, prod]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    branches: [develop, staging, prod]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    # The target branch doubles as the environment name (develop/staging/prod).
+    # On pull_request, github.ref_name is "<PR#>/merge", so use github.base_ref
+    # (the PR target branch); on push it is the branch name itself.
+    environment: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+    env:
+      ENV: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      TF_IN_AUTOMATION: "true"
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Terraform Init
+        run: |
+          terraform init -no-color \
+            -backend-config="bucket=ai-rorr-tfstate-${ENV}" \
+            -backend-config="key=rorr/${ENV}/terraform.tfstate"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive -no-color
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -input=false -var="env=${ENV}" -out=tfplan
+
+      # apply only on push to a protected branch, never on pull_request.
+      - name: Terraform Apply
+        if: github.event_name == 'push'
+        run: terraform apply -no-color -input=false -auto-approve tfplan
+
+      # Ensure main_db runs the Amazon Linux 2023 postgresql16-server (NOT the PGDG
+      # RHEL-9 server, which is uninstallable on AL2023: the PGDG server links
+      # libldap.so.2 but AL2023 only ships libldap_r-2.4.so.2). pgvector and
+      # timescaledb are sourced from the PGDG extension-only RPMs -- these carry no
+      # libldap dependency and are ABI-compatible with PostgreSQL 16 -- then their
+      # .so/control/SQL files are symlinked into the Amazon server's pkglibdir and
+      # extension dir so the running Amazon postmaster can load them. Idempotent:
+      # skips when postgresql is already active and the vector extension is available.
+      - name: Ensure Amazon postgresql16-server + pgvector on main_db
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
+          echo "main_db instance: $MAIN_DB_ID"
+
+          read -r -d '' BOOTSTRAP <<'SCRIPT' || true
+          set -euo pipefail
+
+          # 0. Idempotency: skip when postgresql is already running AND pgvector is
+          #    available as an extension on the Amazon server.
+          if systemctl is-active --quiet postgresql 2>/dev/null && \
+             su - postgres -c "psql -tAc \"SELECT 1 FROM pg_available_extensions WHERE name='vector'\" -d postgres" 2>/dev/null | grep -q 1; then
+            echo "postgresql already running and pgvector available; skipping"
+            exit 0
+          fi
+
+          # 1. Ensure the PGDG EL-9 repo exists ONLY as a source for the extension
+          #    RPMs. No priority=1 and no PGDG server -- the repo is used solely to
+          #    obtain pgvector_16/timescaledb_16, which are extension-only packages.
+          rpm --import https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL 2>/dev/null || true
+          printf '%s\n' \
+            '[pgdg16]' \
+            'name=PostgreSQL 16 for RHEL 9 x86_64' \
+            'baseurl=https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-9-x86_64' \
+            'enabled=1' \
+            'gpgcheck=1' \
+            'gpgkey=https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL' \
+            > /etc/yum.repos.d/pgdg16.repo
+
+          # 2. Keep the Amazon Linux 2023 postgresql16-server. Pin the install to the
+          #    Amazon repo (disable any PGDG repo) so the broken PGDG server can never
+          #    win -- this is idempotent when the Amazon package is already present.
+          echo "=== Ensuring Amazon postgresql16-server ==="
+          dnf install -y --disablerepo='pgdg*' postgresql16-server postgresql16
+
+          # 3. Install the PGDG extension RPMs. pgvector exists ONLY in the PGDG repo
+          #    (neither Amazon nor Timescale ship it). pgvectorscale is not packaged
+          #    in any configured repo, so it is best-effort.
+          echo "=== Installing pgvector_16 + timescaledb_16 (extension RPMs) ==="
+          dnf install -y pgvector_16 timescaledb_16
+          dnf install -y pgvectorscale-postgresql-16 2>/dev/null \
+            || echo "pgvectorscale not packaged in any repo; skipping (a working install needs a source build)"
+
+          # 4. Resolve the Amazon server's extension paths. pg_config is absent on
+          #    this instance (postgresql16-devel is uninstallable on AL2023 for the
+          #    same libldap reason), so fall back to the known AL2023 paths.
+          PG_CONFIG=$(command -v pg_config || true)
+          if [ -n "$PG_CONFIG" ] && [ -x "$PG_CONFIG" ]; then
+            PKGLIBDIR=$("$PG_CONFIG" --pkglibdir)
+            SHAREDIR=$("$PG_CONFIG" --sharedir)
+          else
+            PKGLIBDIR=/usr/lib64/pgsql
+            SHAREDIR=/usr/share/pgsql
+          fi
+          EXTDIR="$SHAREDIR/extension"
+          mkdir -p "$PKGLIBDIR" "$EXTDIR"
+          echo "Amazon pkglibdir=$PKGLIBDIR extension dir=$EXTDIR"
+
+          # 5. Symlink the PGDG-built extension .so + control/SQL files (installed
+          #    under /usr/pgsql-16) into the Amazon server's pkglibdir/extension dir.
+          echo "=== Linking PGDG extension files into Amazon paths ==="
+          for so in /usr/pgsql-16/lib/vector.so \
+                    /usr/pgsql-16/lib/timescaledb*.so \
+                    /usr/pgsql-16/lib/pgvectorscale*.so; do
+            [ -e "$so" ] && ln -sf "$so" "$PKGLIBDIR/$(basename "$so")"
+          done
+          for f in /usr/pgsql-16/share/extension/vector* \
+                   /usr/pgsql-16/share/extension/timescaledb* \
+                   /usr/pgsql-16/share/extension/vectorscale*; do
+            [ -e "$f" ] && ln -sf "$f" "$EXTDIR/$(basename "$f")"
+          done
+
+          # 6. Ensure PGDATA exists (already does on this instance at v16, so this is
+          #    skipped). Use the Amazon initializer, not the PGDG one.
+          if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then
+            postgresql-setup --initdb
+          fi
+
+          # 7. Ensure timescaledb is preloaded (required to load its extension).
+          CONF=/var/lib/pgsql/data/postgresql.conf
+          if [ -f "$CONF" ] && ! grep -q "^shared_preload_libraries.*timescaledb" "$CONF"; then
+            echo "shared_preload_libraries = 'timescaledb'" >> "$CONF"
+          fi
+
+          # 8. Start the Amazon service. The unit is "postgresql" (NOT postgresql-16),
+          #    and it already sets PGDATA=/var/lib/pgsql/data. Restart so any changed
+          #    preload libraries are reloaded.
+          echo "=== Starting postgresql (Amazon unit) ==="
+          systemctl enable postgresql
+          systemctl restart postgresql
+
+          # 9. Verify the extensions load against the Amazon server.
+          su - postgres -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS vector;\"" \
+            || echo "WARNING: vector extension not loadable"
+          su - postgres -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS timescaledb;\"" \
+            || echo "WARNING: timescaledb extension not loadable"
+          su - postgres -c "psql -d postgres -c \"CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;\"" \
+            || echo "WARNING: pgvectorscale (vectorscale) not available; not packaged in any repo"
+          echo "=== Amazon postgresql16 + pgvector bootstrap complete ==="
+          SCRIPT
+
+          PARAMS=$(jq -n --arg script "$BOOTSTRAP" '{commands: [$script]}')
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$MAIN_DB_ID" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 300 \
+            --region "${AWS_REGION}" \
+            --parameters "$PARAMS" \
+            --query "Command.CommandId" --output text --no-cli-pager)
+          echo "SSM command id: $CMD_ID"
+          STATUS="Pending"
+          for i in $(seq 1 60); do
+            sleep 5
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" \
+              --instance-id "$MAIN_DB_ID" \
+              --region "${AWS_REGION}" \
+              --query "Status" --output text --no-cli-pager 2>/dev/null || echo "Pending")
+            echo "attempt $i/60: status=$STATUS"
+            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then break; fi
+          done
+          OUT=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$MAIN_DB_ID" \
+            --region "${AWS_REGION}" --query "StandardOutputContent" --output text --no-cli-pager)
+          ERR=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$MAIN_DB_ID" \
+            --region "${AWS_REGION}" --query "StandardErrorContent" --output text --no-cli-pager)
+          echo "----- SSM stdout -----"; echo "$OUT"
+          echo "----- SSM stderr -----"; echo "$ERR"
+          if [ "$STATUS" != "Success" ]; then
+            echo "PGDG migration did not succeed (status: $STATUS)" >&2; exit 1
+          fi
+
+      # Build pgvectorscale from source using Rust/pgrx and install into Amazon paths.
+      # Idempotent: skips if vectorscale extension is already available.
+      - name: Build and install pgvectorscale on main_db
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
+          echo "main_db instance: $MAIN_DB_ID"
+
+          read -r -d '' PGVS_SCRIPT <<'PGVSSCRIPT' || true
+          set -euo pipefail
+          export HOME=/root
+          export PATH="/root/.cargo/bin:$PATH"
+          if su -c "psql -d postgres -tAc \"SELECT 1 FROM pg_available_extensions WHERE name='vectorscale';\"" postgres 2>/dev/null | grep -q 1; then
+            echo "vectorscale already available; skipping build"
+            exit 0
+          fi
+          echo "=== build deps ==="
+          dnf install -y --disablerepo=pgdg16 postgresql16-server-devel gcc make git clang openssl-devel
+          echo "=== Rust ==="
+          if ! command -v cargo &>/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+          fi
+          source /root/.cargo/env 2>/dev/null || true
+          rustc --version && cargo --version
+          echo "=== cargo-pgrx 0.16.1 ==="
+          cargo install --locked cargo-pgrx@0.16.1
+          cargo pgrx --version
+          echo "=== pgrx init ==="
+          cargo pgrx init --pg16 /usr/bin/pg_config || true
+          echo "=== clone pgvectorscale ==="
+          rm -rf /tmp/pgvs
+          git clone --depth 1 https://github.com/timescale/pgvectorscale.git /tmp/pgvs
+          cd /tmp/pgvs/pgvectorscale
+          echo "=== build ==="
+          cargo pgrx install --pg-config /usr/bin/pg_config --release
+          echo "=== copy to Amazon paths ==="
+          find /usr/pgsql-16/lib -name "vectorscale*.so" -exec cp -f {} /usr/lib64/pgsql/ \; 2>/dev/null || true
+          find /usr/pgsql-16/share/extension -name "vectorscale*" -exec cp -f {} /usr/share/pgsql/extension/ \; 2>/dev/null || true
+          echo "=== verify ==="
+          su -c "psql -d postgres -c \"SELECT name, default_version FROM pg_available_extensions WHERE name='vectorscale';\"" postgres
+          echo "=== pgvectorscale build complete ==="
+          PGVSSCRIPT
+
+          PARAMS=$(jq -n --arg script "$PGVS_SCRIPT" '{commands: [$script]}')
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$MAIN_DB_ID" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 1800 \
+            --region "${AWS_REGION}" \
+            --parameters "$PARAMS" \
+            --query "Command.CommandId" --output text --no-cli-pager)
+          echo "SSM command id: $CMD_ID"
+          STATUS="Pending"
+          for i in $(seq 1 90); do
+            sleep 20
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" \
+              --instance-id "$MAIN_DB_ID" \
+              --region "${AWS_REGION}" \
+              --query "StatusDetails" --output text --no-cli-pager 2>/dev/null || echo "Pending")
+            echo "[$i] status: $STATUS"
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut|DeliveryTimedOut) break ;;
+            esac
+          done
+          OUT=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "$MAIN_DB_ID" \
+            --region "${AWS_REGION}" \
+            --query "StandardOutputContent" --output text --no-cli-pager 2>/dev/null || true)
+          ERR=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "$MAIN_DB_ID" \
+            --region "${AWS_REGION}" \
+            --query "StandardErrorContent" --output text --no-cli-pager 2>/dev/null || true)
+          echo "=== STDOUT ===" && echo "$OUT"
+          echo "=== STDERR ===" && echo "$ERR"
+          if [ "$STATUS" != "Success" ]; then
+            echo "SSM command failed with status: $STATUS"; exit 1
+          fi
+
+      # Ensure the Neo4j Browser web UI jar is present on the already-running
+      # Neo4j instance. user_data only installs it on (re)boot, so an in-place
+      # apply that does not replace the instance would otherwise never pick up a
+      # newly published browser release. This step is idempotent: it no-ops when
+      # a browser jar is already installed, and drives the install over SSM.
+      - name: Bootstrap neo4j-browser on running instance
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          NEO4J_ID=$(terraform output -raw -no-color neo4j_instance_id)
+          echo "neo4j instance: $NEO4J_ID"
+
+          # Build the remote bootstrap script. Kept in a quoted heredoc so no
+          # GitHub Actions / shell expansion happens locally; it runs verbatim
+          # on the instance under AWS-RunShellScript.
+          read -r -d '' BOOTSTRAP <<'SCRIPT' || true
+          set -euo pipefail
+          NEO4J_LIB_DIR=/var/lib/neo4j/lib
+          if ls "$NEO4J_LIB_DIR"/neo4j-browser-*.jar >/dev/null 2>&1; then
+            echo "neo4j-browser jar already present in $NEO4J_LIB_DIR; skipping install"
+            exit 0
+          fi
+
+          BROWSER_BASE="https://repo1.maven.org/maven2/org/neo4j/client/neo4j-browser"
+
+          # Resolve the latest stable Neo4j 5.x browser release from Maven
+          # Central metadata (X.Y.Z only, no -M/-RC/-alpha qualifiers).
+          BROWSER_VERSION=$(curl -fsSL "$BROWSER_BASE/maven-metadata.xml" \
+            | grep -oE '<version>5\.[0-9]+\.[0-9]+</version>' \
+            | sed -E 's|</?version>||g' \
+            | sort -t. -k1,1n -k2,2n -k3,3n \
+            | tail -n1)
+          test -n "$BROWSER_VERSION"
+
+          BROWSER_JAR="neo4j-browser-$BROWSER_VERSION.jar"
+          BROWSER_URL="$BROWSER_BASE/$BROWSER_VERSION/$BROWSER_JAR"
+          TMP_JAR=$(mktemp)
+
+          # Download the jar and verify its SHA1 fail-closed before install.
+          curl -fsSL "$BROWSER_URL" -o "$TMP_JAR"
+          EXPECTED_SHA1=$(curl -fsSL "$BROWSER_URL.sha1" | tr -d '[:space:]')
+          ACTUAL_SHA1=$(sha1sum "$TMP_JAR" | awk '{print $1}')
+          if [ "$EXPECTED_SHA1" != "$ACTUAL_SHA1" ]; then
+            echo "neo4j-browser SHA1 mismatch: expected $EXPECTED_SHA1 got $ACTUAL_SHA1" >&2
+            rm -f "$TMP_JAR"
+            exit 1
+          fi
+          echo "neo4j-browser $BROWSER_VERSION verified; sha1=$ACTUAL_SHA1"
+
+          # Install atomically with neo4j:neo4j ownership, then restart.
+          mkdir -p "$NEO4J_LIB_DIR"
+          chown neo4j:neo4j "$NEO4J_LIB_DIR"
+          install -o neo4j -g neo4j -m 0644 "$TMP_JAR" "$NEO4J_LIB_DIR/$BROWSER_JAR"
+          rm -f "$TMP_JAR"
+          systemctl restart neo4j
+          echo "neo4j-browser $BROWSER_VERSION installed"
+          SCRIPT
+
+          # Safely embed the multi-line script into the SSM parameters JSON.
+          PARAMS=$(jq -n --arg script "$BOOTSTRAP" '{commands: [$script]}')
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$NEO4J_ID" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 120 \
+            --region "${AWS_REGION}" \
+            --parameters "$PARAMS" \
+            --query "Command.CommandId" --output text --no-cli-pager)
+          echo "SSM command id: $CMD_ID"
+
+          # Poll for completion: every 5s, up to 24 attempts (2 minutes).
+          STATUS="Pending"
+          for i in $(seq 1 24); do
+            sleep 5
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" \
+              --instance-id "$NEO4J_ID" \
+              --region "${AWS_REGION}" \
+              --query "Status" --output text --no-cli-pager 2>/dev/null || echo "Pending")
+            echo "attempt $i/24: status=$STATUS"
+            if [ "$STATUS" = "Success" ] || [ "$STATUS" = "Failed" ]; then
+              break
+            fi
+          done
+
+          OUT=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "$NEO4J_ID" \
+            --region "${AWS_REGION}" \
+            --query "StandardOutputContent" --output text --no-cli-pager)
+          ERR=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "$NEO4J_ID" \
+            --region "${AWS_REGION}" \
+            --query "StandardErrorContent" --output text --no-cli-pager)
+          echo "----- SSM stdout -----"
+          echo "$OUT"
+          echo "----- SSM stderr -----"
+          echo "$ERR"
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "neo4j-browser bootstrap did not succeed (status: $STATUS)" >&2
+            exit 1
+          fi
+
+      # Persist live connection info back into ai/rorr/{env} for components to read.
+      - name: Update ai/rorr secret with connection info
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          MSK=$(terraform output -raw -no-color msk_bootstrap_brokers)
+          REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
+          REDIS_PORT=$(terraform output -raw -no-color redis_port)
+          DB_HOST=$(terraform output -raw -no-color main_db_private_ip)
+          NEO4J_URI=$(terraform output -raw -no-color neo4j_uri)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/rorr/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg msk "$MSK" \
+            --arg rh "$REDIS_HOST" \
+            --arg rp "$REDIS_PORT" \
+            --arg dh "$DB_HOST" \
+            --arg n4j "$NEO4J_URI" \
+            '.msk_bootstrap_servers=$msk | .redis_host=$rh | .redis_port=$rp | .db_host=$dh | .neo4j_uri=$n4j')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/rorr/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Persist the DataCenter CI/CD IAM user access key into the deploy-account
+      # secret so external CI/CD runners can authenticate.
+      - name: Store DataCenter CI/CD credentials in ai/service/account secret
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          DC_KEY_ID=$(terraform output -raw -no-color datacenter_cicd_access_key_id)
+          DC_SECRET=$(terraform output -raw -no-color datacenter_cicd_secret_access_key)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/service/account/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg id "$DC_KEY_ID" \
+            --arg secret "$DC_SECRET" \
+            '.aws_access_key_id=$id | .aws_secret_access_key=$secret')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/service/account/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+      # Persist full infrastructure inventory to ai/rorr-infra/{env} on every apply.
+      - name: Update ai/rorr-infra secret with infra inventory
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          VPC_ID=$(terraform output -raw -no-color vpc_id)
+          PRIVATE_SUBNETS=$(terraform output -json -no-color private_subnet_ids)
+          PUBLIC_SUBNETS=$(terraform output -json -no-color public_subnet_ids)
+          MSK=$(terraform output -raw -no-color msk_bootstrap_brokers)
+          REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
+          REDIS_PORT=$(terraform output -raw -no-color redis_port)
+          MAIN_DB_IP=$(terraform output -raw -no-color main_db_private_ip)
+          MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
+          MAIN_DB_DNS=$(terraform output -raw -no-color main_db_private_dns)
+          MAIN_DB_AZ=$(terraform output -raw -no-color main_db_availability_zone)
+          KAFKA_UI_IP=$(terraform output -raw -no-color kafka_ui_private_ip)
+          KAFKA_UI_ID=$(terraform output -raw -no-color kafka_ui_instance_id)
+          KAFKA_UI_DNS=$(terraform output -raw -no-color kafka_ui_private_dns)
+          KAFKA_UI_AZ=$(terraform output -raw -no-color kafka_ui_availability_zone)
+          SOCKET_1_ID=$(terraform output -raw -no-color socket_1_instance_id)
+          SOCKET_1_IP=$(terraform output -raw -no-color socket_1_private_ip)
+          SOCKET_1_DNS=$(terraform output -raw -no-color socket_1_private_dns)
+          SOCKET_1_AZ=$(terraform output -raw -no-color socket_1_availability_zone)
+          SOCKET_2_ID=$(terraform output -raw -no-color socket_2_instance_id)
+          SOCKET_2_IP=$(terraform output -raw -no-color socket_2_private_ip)
+          SOCKET_2_DNS=$(terraform output -raw -no-color socket_2_private_dns)
+          SOCKET_2_AZ=$(terraform output -raw -no-color socket_2_availability_zone)
+          OLLAMA_ID=$(terraform output -raw -no-color ollama_instance_id)
+          OLLAMA_IP=$(terraform output -raw -no-color ollama_private_ip)
+          OLLAMA_DNS=$(terraform output -raw -no-color ollama_private_dns)
+          OLLAMA_AZ=$(terraform output -raw -no-color ollama_availability_zone)
+          OLLAMA_TYPE=$(terraform output -raw -no-color ollama_instance_type)
+          SOCKET_ALB_DNS=$(terraform output -raw -no-color socket_alb_dns_name)
+          SOCKET_ALB_ARN=$(terraform output -raw -no-color socket_alb_arn)
+          SOCKET_ALB_ZONE=$(terraform output -raw -no-color socket_alb_zone_id)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg vpc        "$VPC_ID" \
+            --argjson priv   "$PRIVATE_SUBNETS" \
+            --argjson pub    "$PUBLIC_SUBNETS" \
+            --arg msk_iam    "$MSK" \
+            --arg redis_h    "$REDIS_HOST" \
+            --arg redis_p    "$REDIS_PORT" \
+            --arg db_ip      "$MAIN_DB_IP" \
+            --arg db_id      "$MAIN_DB_ID" \
+            --arg db_dns     "$MAIN_DB_DNS" \
+            --arg db_az      "$MAIN_DB_AZ" \
+            --arg kafka_ip   "$KAFKA_UI_IP" \
+            --arg kafka_id   "$KAFKA_UI_ID" \
+            --arg kafka_dns  "$KAFKA_UI_DNS" \
+            --arg kafka_az   "$KAFKA_UI_AZ" \
+            --arg s1_id      "$SOCKET_1_ID" \
+            --arg s1_ip      "$SOCKET_1_IP" \
+            --arg s1_dns     "$SOCKET_1_DNS" \
+            --arg s1_az      "$SOCKET_1_AZ" \
+            --arg s2_id      "$SOCKET_2_ID" \
+            --arg s2_ip      "$SOCKET_2_IP" \
+            --arg s2_dns     "$SOCKET_2_DNS" \
+            --arg s2_az      "$SOCKET_2_AZ" \
+            --arg ollama_id  "$OLLAMA_ID" \
+            --arg ollama_ip  "$OLLAMA_IP" \
+            --arg ollama_dns "$OLLAMA_DNS" \
+            --arg ollama_az  "$OLLAMA_AZ" \
+            --arg ollama_type "$OLLAMA_TYPE" \
+            --arg alb_dns    "$SOCKET_ALB_DNS" \
+            --arg alb_arn    "$SOCKET_ALB_ARN" \
+            --arg alb_zone   "$SOCKET_ALB_ZONE" \
+            '. + {
+              network: ((.network // {}) + {
+                vpc_id: $vpc,
+                private_subnet_ids: $priv,
+                public_subnet_ids: $pub
+              }),
+              msk: ((.msk // {}) + {
+                bootstrap_brokers_iam: $msk_iam
+              }),
+              redis: ((.redis // {}) + {
+                endpoint: $redis_h,
+                port: ($redis_p | tonumber)
+              }),
+              ec2: ((.ec2 // {}) + {
+                main_db:  ((.ec2.main_db  // {}) + { instance_id: $db_id,    private_ip: $db_ip,    private_dns: $db_dns,    availability_zone: $db_az }),
+                kafka_ui: ((.ec2.kafka_ui // {}) + { instance_id: $kafka_id, private_ip: $kafka_ip, private_dns: $kafka_dns, availability_zone: $kafka_az }),
+                socket_1: ((.ec2.socket_1 // {}) + { instance_id: $s1_id,    private_ip: $s1_ip,    private_dns: $s1_dns,    availability_zone: $s1_az }),
+                socket_2: ((.ec2.socket_2 // {}) + { instance_id: $s2_id,    private_ip: $s2_ip,    private_dns: $s2_dns,    availability_zone: $s2_az }),
+                ollama:   ((.ec2.ollama   // {}) + { instance_id: $ollama_id, private_ip: $ollama_ip, private_dns: $ollama_dns, availability_zone: $ollama_az, instance_type: $ollama_type, key_name: null, public_ip: null })
+              }),
+              alb: ((.alb // {}) + {
+                socket: { dns: $alb_dns, arn: $alb_arn, zone_id: $alb_zone }
+              })
+            }')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Add the ai-service ECS descriptor under ecs.ai_service in ai/rorr-infra/{env}.
+      # Read-merge-write: reads the current JSON, sets only .ecs.ai_service and writes
+      # it back, so ecs.backend and every other top-level key are preserved.
+      - name: Update ai/rorr-infra secret with ai-service ECS info
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          AI_ECS=$(terraform output -json -no-color ai_service_ecs)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --argjson ai "$AI_ECS" \
+            '.ecs = ((.ecs // {}) + { ai_service: $ai })')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "ai/rorr-infra/${ENV}" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Update rorr/{env}/database host when DB instance IP changes.
+      - name: Update rorr database secret with db host
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          MAIN_DB_IP=$(terraform output -raw -no-color main_db_private_ip)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/database" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq --arg h "$MAIN_DB_IP" '.host = $h')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/database" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Update rorr/{env}/neo4j uri when the Neo4j instance IP changes.
+      - name: Update rorr neo4j secret with uri
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          NEO4J_URI=$(terraform output -raw -no-color neo4j_uri)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/neo4j" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq --arg u "$NEO4J_URI" '.uri = $u')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/neo4j" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Update rorr/{env}/redis host and port when ElastiCache endpoint changes.
+      - name: Update rorr redis secret with redis endpoint
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
+          REDIS_PORT=$(terraform output -raw -no-color redis_port)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/redis" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg h "$REDIS_HOST" \
+            --arg p "$REDIS_PORT" \
+            '.host = $h | .port = $p')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/redis" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Add the object-events topics to rorr/{env}/kafka .topics. Read-merge-write:
+      # the two new rorr-lol- prefixed keys are set and every other existing topic
+      # entry is preserved. The old prefix-less keys (object-events,
+      # object-events-dlq) are explicitly deleted first so stale entries do not
+      # linger. del() on a missing key is a no-op, so this stays idempotent across
+      # repeated applies.
+      - name: Update rorr kafka secret with object-event topics
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          TOPICS=$(terraform output -json -no-color lol_object_event_topics)
+          OBJ_EVENTS=$(echo "$TOPICS" | jq -r '.object_events')
+          OBJ_EVENTS_DLQ=$(echo "$TOPICS" | jq -r '.object_events_dlq')
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/kafka" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg oe "$OBJ_EVENTS" \
+            --arg dlq "$OBJ_EVENTS_DLQ" \
+            '((.topics // {}) | del(.["object-events"], .["object-events-dlq"])) as $cleaned
+             | .topics = ($cleaned + { "rorr-lol-object-events": {"name": $oe}, "rorr-lol-object-events-dlq": {"name": $dlq} })')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/kafka" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+
+      # Add the object-relay / object-simulator service ARNs to
+      # rorr/{env}/ecs-services .services. Read-merge-write: only the two new
+      # keys are set, so every existing service entry is preserved.
+      - name: Update rorr ecs-services secret with object service ARNs
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          RELAY_ARN=$(terraform output -raw -no-color lol_object_relay_service_arn)
+          SIM_ARN=$(terraform output -raw -no-color lol_object_simulator_service_arn)
+
+          CURRENT=$(aws secretsmanager get-secret-value \
+            --secret-id "rorr/${ENV}/ecs-services" \
+            --region "${AWS_REGION}" \
+            --query SecretString --output text --no-cli-pager)
+
+          UPDATED=$(echo "$CURRENT" | jq \
+            --arg relay "$RELAY_ARN" \
+            --arg sim "$SIM_ARN" \
+            '.services = ((.services // {}) + { "rorr-lol-object-relay": {"serviceArn": $relay}, "rorr-lol-object-simulator": {"serviceArn": $sim} })')
+
+          aws secretsmanager put-secret-value \
+            --secret-id "rorr/${ENV}/ecs-services" \
+            --region "${AWS_REGION}" \
+            --secret-string "$UPDATED" \
+            --no-cli-pager
+# trigger: sync secrets

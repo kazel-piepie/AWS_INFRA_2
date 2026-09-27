@@ -1,0 +1,63 @@
+# --- kafka_ui component setup ----------------------------------------------
+# Rendered into the component_setup slot of bootstrap.sh.tftpl for the kafka_ui
+# host.
+#
+# The kafka-ui container bakes the MSK bootstrap servers in at container-create
+# time (-e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS). cloud-init user-data only runs
+# once per instance, and "--restart always" merely restarts the *existing*
+# container with its old baked-in value, so a plain reboot never picks up a
+# changed MSK bootstrap address.
+#
+# Fix: install a cloud-init scripts-per-boot hook. AL2023 ships cloud-init with
+# the scripts-per-boot module enabled by default, so any executable in
+# /var/lib/cloud/scripts/per-boot runs on EVERY boot (including reboots). The
+# hook re-reads the ai/rorr secret into /etc/rorr/rorr.env and recreates the
+# kafka-ui container with the current MSK bootstrap value.
+dnf -y install docker
+systemctl enable --now docker
+
+# Install the per-boot hook. Use a quoted heredoc so the outer bootstrap shell
+# does not expand the runtime shell variables ($SECRET, $MSK_BOOTSTRAP, ...);
+# only the secret_name / region template vars are substituted at render time.
+mkdir -p /var/lib/cloud/scripts/per-boot
+cat > /var/lib/cloud/scripts/per-boot/10-kafka-ui.sh << 'PERBOOT'
+#!/bin/bash
+set -euo pipefail
+
+# Refresh /etc/rorr/rorr.env from the ai/rorr secret on every boot so the
+# kafka-ui container is always (re)created with the current MSK bootstrap
+# servers. user-data does not re-run on reboot, so this hook owns the refresh.
+mkdir -p /etc/rorr
+SECRET=$(aws secretsmanager get-secret-value \
+  --secret-id "${secret_name}" \
+  --region "${region}" \
+  --query SecretString --output text --no-cli-pager)
+echo "$SECRET" | jq -r 'to_entries | .[] | "RORR_" + (.key | ascii_upcase) + "=" + (.value | tostring)' \
+  > /etc/rorr/rorr.env
+chmod 600 /etc/rorr/rorr.env
+
+# Make sure docker is up before we touch containers (enabled at boot, but the
+# per-boot stage can race the docker unit on a cold reboot).
+systemctl enable --now docker
+
+# Read the freshly written MSK bootstrap value and recreate the container so the
+# new address is baked in. Removing a non-existent container (first boot) is a
+# no-op thanks to "|| true".
+MSK_BOOTSTRAP=$(grep '^RORR_MSK_BOOTSTRAP_SERVERS=' /etc/rorr/rorr.env | cut -d= -f2-)
+docker rm -f kafka-ui 2>/dev/null || true
+docker run -d --restart always --name kafka-ui -p 8080:8080 \
+  -e KAFKA_CLUSTERS_0_NAME=rorr \
+  -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS="$MSK_BOOTSTRAP" \
+  -e KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL=SASL_SSL \
+  -e KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM=AWS_MSK_IAM \
+  -e "KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG=software.amazon.msk.auth.iam.IAMLoginModule required;" \
+  -e KAFKA_CLUSTERS_0_PROPERTIES_SASL_CLIENT_CALLBACK_HANDLER_CLASS=software.amazon.msk.auth.iam.IAMClientCallbackHandler \
+  provectuslabs/kafka-ui:latest
+PERBOOT
+chmod +x /var/lib/cloud/scripts/per-boot/10-kafka-ui.sh
+
+# Run the hook once now so kafka-ui comes up on this first boot. On the very
+# first boot cloud-init's scripts-per-boot module runs BEFORE scripts-user
+# (this user-data), so the hook is not auto-invoked yet on first boot; on every
+# later reboot cloud-init runs it automatically.
+/var/lib/cloud/scripts/per-boot/10-kafka-ui.sh

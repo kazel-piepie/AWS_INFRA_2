@@ -1,0 +1,64 @@
+name: rorr-backend-deploy
+
+# Build the backend Docker image, push it to ECR, and roll the ECS service.
+# Uses the dedicated, least-privilege backend CI/CD IAM user credentials
+# (provisioned by Terraform) stored as GitHub Environment secrets:
+#   BACKEND_AWS_ACCESS_KEY_ID / BACKEND_AWS_SECRET_ACCESS_KEY
+on:
+  push:
+    branches: [develop, staging, prod]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Branch name doubles as the environment name (develop/staging/prod).
+    environment: ${{ github.ref_name }}
+    env:
+      ENV: ${{ github.ref_name }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REPOSITORY: ai-rorr-${{ github.ref_name }}-backend
+      ECS_CLUSTER: ai-rorr-${{ github.ref_name }}-backend-cluster
+      ECS_SERVICE: ai-rorr-${{ github.ref_name }}-backend-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (backend CI/CD user)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.BACKEND_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.BACKEND_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+                       -t "$REGISTRY/$ECR_REPOSITORY:latest" ./backend
+          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Deploy to ECS
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --region "$AWS_REGION" \
+            --no-cli-pager
