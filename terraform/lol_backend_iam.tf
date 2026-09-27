@@ -50,26 +50,26 @@ locals {
 # Existing secret holding the LOL backend ECS service ARNs + ECR repo URI.
 # Created out-of-band by the MCP server; referenced here (never managed).
 data "aws_secretsmanager_secret" "rorr_lol_ecs_services" {
-  name = "rorr/develop/ecs-services"
+  name = "rorr/${var.env}/ecs-services"
 }
 
 # Per-concern application secrets, created out-of-band by the MCP server and
 # referenced here (never managed). Each task role is granted GetSecretValue
 # only on the secrets it actually reads at runtime (least privilege).
 data "aws_secretsmanager_secret" "rorr_lol_database" {
-  name = "rorr/develop/database"
+  name = "rorr/${var.env}/database"
 }
 
 data "aws_secretsmanager_secret" "rorr_lol_riot" {
-  name = "rorr/develop/riot"
+  name = "rorr/${var.env}/riot"
 }
 
 data "aws_secretsmanager_secret" "rorr_lol_kafka" {
-  name = "rorr/develop/kafka"
+  name = "rorr/${var.env}/kafka"
 }
 
 data "aws_secretsmanager_secret" "rorr_lol_redis" {
-  name = "rorr/develop/redis"
+  name = "rorr/${var.env}/redis"
 }
 
 # ---------------------------------------------------------------------------
