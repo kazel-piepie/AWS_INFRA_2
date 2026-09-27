@@ -94,7 +94,18 @@ JSONEOF
     EOC
   }
 
-  depends_on = [aws_instance.main_db]
+  depends_on = [
+    aws_instance.main_db,
+    aws_msk_cluster.main,
+    aws_elasticache_cluster.redis,
+    aws_ecs_cluster.backend,
+    aws_ecs_cluster.neo4j,
+    aws_ecs_cluster.teams_bot,
+    aws_lb.backend,
+    aws_lb.socket,
+    aws_lb.teams_bot,
+    aws_lb.simulator,
+  ]
 }
 
 resource "null_resource" "main_db_sql" {

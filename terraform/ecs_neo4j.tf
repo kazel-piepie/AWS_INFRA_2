@@ -26,19 +26,6 @@ data "aws_secretsmanager_secret" "neo4j_app" {
   name = "rorr/${var.env}/neo4j"
 }
 
-# Existing Neo4j security group, matched by name within the RORR VPC.
-data "aws_security_group" "neo4j" {
-  filter {
-    name   = "group-name"
-    values = ["${local.name_prefix}-neo4j-sg"]
-  }
-
-  filter {
-    name   = "vpc-id"
-    values = [aws_vpc.main.id]
-  }
-}
-
 # Dedicated ECS task role (application runtime permissions). The existing
 # EC2 instance role (ai-rorr-<env>-neo4j-role) cannot be reused here because
 # its trust policy only allows ec2.amazonaws.com — an ECS task role must be
@@ -252,7 +239,7 @@ resource "aws_ecs_service" "neo4j" {
 
   network_configuration {
     subnets          = aws_subnet.private[*].id
-    security_groups  = [data.aws_security_group.neo4j.id]
+    security_groups  = [aws_security_group.neo4j.id]
     assign_public_ip = false
   }
 
