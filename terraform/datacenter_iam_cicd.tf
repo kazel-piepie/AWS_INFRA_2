@@ -64,7 +64,7 @@ locals {
 # Externally-created secret holding the LOL backend ECS service references.
 # Referenced as a data source per infra rules; never managed here.
 data "aws_secretsmanager_secret" "rorr_ecs_services" {
-  name = "rorr/develop/ecs-services"
+  name = "rorr/${var.env}/ecs-services"
 }
 
 resource "aws_iam_user" "datacenter_cicd" {
