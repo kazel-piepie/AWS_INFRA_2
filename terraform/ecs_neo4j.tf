@@ -21,10 +21,10 @@
 # AWS SDK (src/config/secrets.ts). The task role grants GetSecretValue; these
 # are NOT injected via the execution role or the task definition secrets block.
 # rorr/<env>/database: reuses the data source declared in lol_backend_iam.tf.
-# rorr/<env>/neo4j:    dedicated data source declared here (not used elsewhere).
-data "aws_secretsmanager_secret" "neo4j_app" {
-  name = "rorr/${var.env}/neo4j"
-}
+# rorr/<env>/neo4j:    references the resource created in secrets.tf directly
+#                      (aws_secretsmanager_secret.neo4j). Using a data source here
+#                      caused a plan-time read failure because the secret does not
+#                      exist until apply creates it.
 
 # Dedicated ECS task role (application runtime permissions). The existing
 # EC2 instance role (ai-rorr-<env>-neo4j-role) cannot be reused here because
@@ -55,7 +55,7 @@ resource "aws_iam_role_policy" "neo4j_ecs_task_secret" {
       Resource = [
         data.aws_secretsmanager_secret.rorr.arn,              # ai/rorr/<env>
         data.aws_secretsmanager_secret.rorr_lol_database.arn, # rorr/<env>/database
-        data.aws_secretsmanager_secret.neo4j_app.arn,         # rorr/<env>/neo4j
+        aws_secretsmanager_secret.neo4j.arn,                  # rorr/<env>/neo4j
       ]
     }]
   })
