@@ -3,6 +3,7 @@ name: rorr-terraform
 # Deploy RORR infrastructure. Each protected branch maps to its own GitHub
 # Environment (and therefore its own AWS account credentials and state bucket).
 on:
+  workflow_dispatch:
   push:
     branches: [develop, staging, prod]
     paths:
