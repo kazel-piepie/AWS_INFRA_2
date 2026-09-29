@@ -66,7 +66,7 @@ jobs:
 
       # apply only on push to a protected branch, never on pull_request.
       - name: Terraform Apply
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: terraform apply -no-color -input=false -auto-approve tfplan
 
       # Ensure main_db runs the Amazon Linux 2023 postgresql16-server (NOT the PGDG
@@ -78,7 +78,7 @@ jobs:
       # extension dir so the running Amazon postmaster can load them. Idempotent:
       # skips when postgresql is already active and the vector extension is available.
       - name: Ensure Amazon postgresql16-server + pgvector on main_db
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
@@ -213,7 +213,7 @@ jobs:
       # Build pgvectorscale from source using Rust/pgrx and install into Amazon paths.
       # Idempotent: skips if vectorscale extension is already available.
       - name: Build and install pgvectorscale on main_db
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           MAIN_DB_ID=$(terraform output -raw -no-color main_db_instance_id)
@@ -298,7 +298,7 @@ jobs:
       # newly published browser release. This step is idempotent: it no-ops when
       # a browser jar is already installed, and drives the install over SSM.
       - name: Bootstrap neo4j-browser on running instance
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           NEO4J_ID=$(terraform output -raw -no-color neo4j_instance_id)
@@ -399,7 +399,7 @@ jobs:
 
       # Persist live connection info back into ai/rorr/{env} for components to read.
       - name: Update ai/rorr secret with connection info
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           MSK=$(terraform output -raw -no-color msk_bootstrap_brokers)
@@ -430,7 +430,7 @@ jobs:
       # Persist the DataCenter CI/CD IAM user access key into the deploy-account
       # secret so external CI/CD runners can authenticate.
       - name: Store DataCenter CI/CD credentials in ai/service/account secret
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           DC_KEY_ID=$(terraform output -raw -no-color datacenter_cicd_access_key_id)
@@ -453,7 +453,7 @@ jobs:
             --no-cli-pager
       # Persist full infrastructure inventory to ai/rorr-infra/{env} on every apply.
       - name: Update ai/rorr-infra secret with infra inventory
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           VPC_ID=$(terraform output -raw -no-color vpc_id)
@@ -558,7 +558,7 @@ jobs:
       # Read-merge-write: reads the current JSON, sets only .ecs.ai_service and writes
       # it back, so ecs.backend and every other top-level key are preserved.
       - name: Update ai/rorr-infra secret with ai-service ECS info
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           AI_ECS=$(terraform output -json -no-color ai_service_ecs)
@@ -580,7 +580,7 @@ jobs:
 
       # Update rorr/{env}/database host when DB instance IP changes.
       - name: Update rorr database secret with db host
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           MAIN_DB_IP=$(terraform output -raw -no-color main_db_private_ip)
@@ -600,7 +600,7 @@ jobs:
 
       # Update rorr/{env}/neo4j uri when the Neo4j instance IP changes.
       - name: Update rorr neo4j secret with uri
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           NEO4J_URI=$(terraform output -raw -no-color neo4j_uri)
@@ -620,7 +620,7 @@ jobs:
 
       # Update rorr/{env}/redis host and port when ElastiCache endpoint changes.
       - name: Update rorr redis secret with redis endpoint
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           REDIS_HOST=$(terraform output -raw -no-color redis_endpoint)
@@ -649,7 +649,7 @@ jobs:
       # linger. del() on a missing key is a no-op, so this stays idempotent across
       # repeated applies.
       - name: Update rorr kafka secret with object-event topics
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           TOPICS=$(terraform output -json -no-color lol_object_event_topics)
@@ -677,7 +677,7 @@ jobs:
       # rorr/{env}/ecs-services .services. Read-merge-write: only the two new
       # keys are set, so every existing service entry is preserved.
       - name: Update rorr ecs-services secret with object service ARNs
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           RELAY_ARN=$(terraform output -raw -no-color lol_object_relay_service_arn)
