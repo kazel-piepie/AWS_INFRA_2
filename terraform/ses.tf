@@ -32,26 +32,34 @@ output "ses_domain_verified" {
   value       = aws_sesv2_email_identity.rorr_club_domain.verified_for_sending_status
 }
 
-# SES email-address identity for kazel@rorr.club.
-# Auto-verified through the verified rorr.club domain identity above.
-resource "aws_sesv2_email_identity" "kazel" {
-  email_identity = "kazel@rorr.club"
+# SES email-address identities for @rorr.club team members.
+# All auto-verified through the verified rorr.club domain identity above.
+# Created out-of-band in both environments; imported here.
+locals {
+  ses_team_emails = toset(["jun", "noah", "woody", "erin", "kazel"])
+}
+
+import {
+  for_each = local.ses_team_emails
+  to       = aws_sesv2_email_identity.team[each.key]
+  id       = "${each.key}@rorr.club"
+}
+
+resource "aws_sesv2_email_identity" "team" {
+  for_each = local.ses_team_emails
+
+  email_identity = "${each.key}@rorr.club"
 
   tags = {
-    Name = "${local.name_prefix}-ses-kazel"
+    Name = "${local.name_prefix}-ses-${each.key}"
   }
 
   depends_on = [aws_sesv2_email_identity.rorr_club_domain]
 }
 
-output "ses_kazel_identity" {
-  description = "SES email identity name for kazel@rorr.club"
-  value       = aws_sesv2_email_identity.kazel.email_identity
-}
-
-output "ses_kazel_verified_for_sending" {
-  description = "Whether the kazel@rorr.club identity is verified for sending"
-  value       = aws_sesv2_email_identity.kazel.verified_for_sending_status
+output "ses_team_identities" {
+  description = "SES email identity names for team members"
+  value       = { for k, v in aws_sesv2_email_identity.team : k => v.verified_for_sending_status }
 }
 
 # SNS topics for SES event notifications.
