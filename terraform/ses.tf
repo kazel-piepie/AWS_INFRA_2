@@ -35,6 +35,16 @@ output "ses_domain_verified" {
 # SES email-address identities for @rorr.club team members.
 # All auto-verified through the verified rorr.club domain identity above.
 # Created out-of-band in both environments; imported here.
+#
+# moved: the previous ses.tf had a standalone aws_sesv2_email_identity.kazel
+# resource. This block renames it in state to team["kazel"] so Terraform
+# does not destroy and recreate the identity (prod still carries the old name
+# in state when this code first applies there).
+moved {
+  from = aws_sesv2_email_identity.kazel
+  to   = aws_sesv2_email_identity.team["kazel"]
+}
+
 locals {
   ses_team_emails = toset(["jun", "noah", "woody", "erin", "kazel"])
 }
