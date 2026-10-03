@@ -189,7 +189,7 @@ data "aws_iam_policy_document" "ai_task_bedrock" {
       "bedrock:InvokeModelWithResponseStream",
     ]
     resources = [
-      "arn:aws:bedrock:us-east-1:161327178737:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
       "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
       "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
       "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
