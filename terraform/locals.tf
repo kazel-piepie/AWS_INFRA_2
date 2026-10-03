@@ -31,7 +31,7 @@ locals {
       main_db  = "m6a.xlarge"
       neo4j    = "m6a.large"
       socket   = "m6a.large"
-      ollama   = "t3a.large"
+      ollama   = "g6.xlarge"
     }
   }
 
