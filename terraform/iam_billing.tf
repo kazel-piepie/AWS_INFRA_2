@@ -70,6 +70,23 @@ resource "aws_iam_user_policy_attachment" "billing_marketplace_subscriptions" {
   user       = aws_iam_user.billing.name
   policy_arn = "arn:aws:iam::aws:policy/AWSMarketplaceManageSubscriptions"
 }
+# Send emails via Amazon SES from the billing console (e.g. invoice delivery).
+resource "aws_iam_user_policy_attachment" "billing_ses_full" {
+  user       = aws_iam_user.billing.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSESFullAccess"
+}
+
+# Create and manage AWS Support cases from the console.
+resource "aws_iam_user_policy_attachment" "billing_support_access" {
+  user       = aws_iam_user.billing.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSSupportAccess"
+}
+
+# Manage AWS Support plan changes (Business / Enterprise upgrade).
+resource "aws_iam_user_policy_attachment" "billing_support_plans" {
+  user       = aws_iam_user.billing.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSSupportPlansFullAccess"
+}
 
 # ---------------------------------------------------------------------------
 # Custom supplement policy for billing-console tasks that are not fully covered
