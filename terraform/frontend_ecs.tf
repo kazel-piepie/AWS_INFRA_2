@@ -424,3 +424,80 @@ resource "aws_cloudfront_distribution" "frontend_ecs" {
     Purpose   = "cdn"
   }
 }
+
+# ---------------------------------------------------------------------------
+# Persist the frontend_ecs group into ai/rorr-infra/${env} after apply.
+# Read-modify-write merge (jq) so other keys in the secret are preserved.
+# ---------------------------------------------------------------------------
+resource "null_resource" "frontend_ecs_secret" {
+  triggers = {
+    alb_dns         = aws_lb.frontend_ecs.dns_name
+    distribution_id = aws_cloudfront_distribution.frontend_ecs.id
+    domain_name     = aws_cloudfront_distribution.frontend_ecs.domain_name
+    cluster_name    = aws_ecs_cluster.frontend_ecs.name
+    service_name    = aws_ecs_service.frontend_ecs.name
+    ecr_url         = aws_ecr_repository.frontend_ecs.repository_url
+    secret_id       = data.aws_secretsmanager_secret.rorr_infra.id
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+
+      GROUP=$(jq -n \
+        --arg alb_dns   "${aws_lb.frontend_ecs.dns_name}" \
+        --arg distid    "${aws_cloudfront_distribution.frontend_ecs.id}" \
+        --arg domain    "${aws_cloudfront_distribution.frontend_ecs.domain_name}" \
+        --arg distarn   "${aws_cloudfront_distribution.frontend_ecs.arn}" \
+        --arg alias     "${local.frontend_ecs_app_domain}" \
+        --arg status    "${aws_cloudfront_distribution.frontend_ecs.status}" \
+        --arg cluster   "${aws_ecs_cluster.frontend_ecs.name}" \
+        --arg service   "${aws_ecs_service.frontend_ecs.name}" \
+        --arg ecr       "${aws_ecr_repository.frontend_ecs.repository_url}" \
+        --arg iamuser   "${aws_iam_user.frontend_ecs_cicd.name}" \
+        --arg keysecret "${aws_secretsmanager_secret.frontend_ecs_cicd_key.name}" \
+        '{
+          "frontend_ecs": {
+            alb: {
+              dns: $alb_dns
+            },
+            cloudfront: {
+              distribution_id: $distid,
+              domain_name:     $domain,
+              arn:             $distarn,
+              alias:           $alias,
+              status:          $status
+            },
+            ecs: {
+              cluster_name:   $cluster,
+              service_name:   $service,
+              ecr_repository: $ecr
+            },
+            cicd: {
+              iam_user:    $iamuser,
+              secret_name: $keysecret
+            }
+          }
+        }')
+
+      CURRENT=$(aws secretsmanager get-secret-value \
+        --secret-id "${data.aws_secretsmanager_secret.rorr_infra.id}" \
+        --region "${var.region}" \
+        --query SecretString --output text --no-cli-pager)
+
+      UPDATED=$(echo "$CURRENT" | jq --argjson group "$GROUP" '. * $group')
+
+      aws secretsmanager put-secret-value \
+        --secret-id "${data.aws_secretsmanager_secret.rorr_infra.id}" \
+        --region "${var.region}" \
+        --secret-string "$UPDATED" \
+        --no-cli-pager
+    EOT
+  }
+
+  depends_on = [
+    aws_cloudfront_distribution.frontend_ecs,
+    aws_ecs_service.frontend_ecs,
+  ]
+}
