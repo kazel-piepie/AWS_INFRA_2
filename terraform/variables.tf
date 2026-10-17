@@ -131,3 +131,37 @@ variable "simulator_health_check_path" {
   type        = string
   default     = "/health"
 }
+
+# ---------------------------------------------------------------------------
+# frontend ECS (Next.js SSR) settings.
+# ---------------------------------------------------------------------------
+
+variable "frontend_ecs_container_port" {
+  description = "Port the frontend ECS container listens on"
+  type        = number
+  default     = 3000
+}
+
+variable "frontend_ecs_cpu" {
+  description = "Fargate task CPU units for the frontend ECS (512 = 0.5 vCPU)"
+  type        = number
+  default     = 512
+}
+
+variable "frontend_ecs_memory" {
+  description = "Fargate task memory (MiB) for the frontend ECS"
+  type        = number
+  default     = 1024
+}
+
+variable "frontend_ecs_desired_count" {
+  description = "Number of frontend ECS Fargate tasks to run"
+  type        = number
+  default     = 1
+}
+
+variable "frontend_ecs_health_check_path" {
+  description = "ALB target group health check path for the frontend ECS"
+  type        = string
+  default     = "/"
+}
