@@ -5,7 +5,7 @@ resource "aws_cloudwatch_log_group" "msk" {
 
 resource "aws_msk_configuration" "main" {
   name           = "${local.name_prefix}-msk-config"
-  kafka_versions = ["3.9.x"]
+  kafka_versions = ["3.6.0"]
 
   server_properties = <<-PROPERTIES
     auto.create.topics.enable=true
@@ -57,6 +57,16 @@ resource "aws_msk_cluster" "main" {
         log_group = aws_cloudwatch_log_group.msk.name
       }
     }
+  }
+
+  # kafka_version and configuration_info are managed outside Terraform:
+  # the cluster was manually upgraded to 3.9.x; ignore drift to prevent
+  # Terraform from attempting an API-driven version change or config swap.
+  lifecycle {
+    ignore_changes = [
+      kafka_version,
+      configuration_info,
+    ]
   }
 
   tags = {
