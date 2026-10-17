@@ -105,4 +105,6 @@ locals {
   # datacenter_live_events, lol_live_events, and lol_ai have been removed;
   # those workloads now run as ECS Fargate services in lol_backend_ecs.tf.
   app_components = {}
+
+  frontend_ecs_app_domain = var.env == "prod" ? "ai-tmp-prod-app.rorr.club" : "ai-tmp-dev-app.rorr.club"
 }
