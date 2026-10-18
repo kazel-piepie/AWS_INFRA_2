@@ -62,7 +62,7 @@ resource "aws_ecr_lifecycle_policy" "frontend_ecs" {
 # ---------------------------------------------------------------------------
 resource "aws_security_group" "frontend_ecs_alb" {
   name        = "${local.name_prefix}-frontend-ecs-alb-sg"
-  description = "RORR frontend ECS ALB HTTP and HTTPS from CloudFront only"
+  description = "RORR frontend ECS ALB HTTPS from CloudFront only"
   vpc_id      = aws_vpc.main.id
 
   ingress {
