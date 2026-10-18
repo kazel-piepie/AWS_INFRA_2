@@ -66,14 +66,6 @@ resource "aws_security_group" "frontend_ecs_alb" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "HTTPS from CloudFront"
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
-  }
-
-  ingress {
     description     = "HTTP from CloudFront"
     from_port       = 80
     to_port         = 80
