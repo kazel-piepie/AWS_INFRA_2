@@ -97,7 +97,6 @@ resource "aws_cloudfront_distribution" "frontend" {
   is_ipv6_enabled     = true
   comment             = "RORR frontend distribution (${var.env})"
   default_root_object = "index.html"
-  aliases             = [local.frontend_domain]
   price_class         = "PriceClass_100"
 
   origin {
