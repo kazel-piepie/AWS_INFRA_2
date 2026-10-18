@@ -378,7 +378,7 @@ resource "aws_cloudfront_distribution" "frontend_ecs" {
   enabled         = true
   is_ipv6_enabled = true
   comment         = "RORR frontend ECS SSR distribution (${var.env})"
-  aliases         = [local.frontend_ecs_app_domain]
+  aliases         = local.frontend_ecs_app_aliases
   price_class     = "PriceClass_100"
 
   origin {
