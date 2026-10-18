@@ -309,6 +309,10 @@ resource "aws_ecs_service" "teams_bot" {
 
   depends_on = [aws_lb_listener.teams_bot_https]
 
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
+  }
+
   tags = {
     Name      = "rorr-lol-teams-bot"
     Component = "teams-bot"
