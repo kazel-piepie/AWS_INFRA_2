@@ -106,5 +106,6 @@ locals {
   # those workloads now run as ECS Fargate services in lol_backend_ecs.tf.
   app_components = {}
 
-  frontend_ecs_app_domain = var.env == "prod" ? "ai-tmp-prod-app.rorr.club" : "ai-tmp-dev-app.rorr.club"
+  frontend_ecs_app_domain  = var.env == "prod" ? "ai-tmp-prod-app.rorr.club" : "ai-tmp-dev-app.rorr.club"
+  frontend_ecs_app_aliases = var.env == "prod" ? ["ai-tmp-prod-app.rorr.club", "ai-prod-app.rorr.club"] : ["ai-tmp-dev-app.rorr.club", "ai-dev-app.rorr.club"]
 }
