@@ -62,13 +62,21 @@ resource "aws_ecr_lifecycle_policy" "frontend_ecs" {
 # ---------------------------------------------------------------------------
 resource "aws_security_group" "frontend_ecs_alb" {
   name        = "${local.name_prefix}-frontend-ecs-alb-sg"
-  description = "RORR frontend ECS ALB HTTPS from CloudFront only"
+  description = "RORR frontend ECS ALB HTTP and HTTPS from CloudFront only"
   vpc_id      = aws_vpc.main.id
 
   ingress {
     description     = "HTTPS from CloudFront"
     from_port       = 443
     to_port         = 443
+    protocol        = "tcp"
+    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+  }
+
+  ingress {
+    description     = "HTTP from CloudFront"
+    from_port       = 80
+    to_port         = 80
     protocol        = "tcp"
     prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   }
@@ -392,7 +400,7 @@ resource "aws_cloudfront_distribution" "frontend_ecs" {
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "https-only"
+      origin_protocol_policy = "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
