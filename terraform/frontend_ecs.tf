@@ -176,16 +176,12 @@ resource "aws_lb_listener" "frontend_ecs_http" {
   protocol          = "HTTP"
 
   default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend_ecs.arn
   }
 
   tags = {
-    Name = "${local.name_prefix}-frontend-ecs-http-redirect"
+    Name = "${local.name_prefix}-frontend-ecs-http"
   }
 }
 
