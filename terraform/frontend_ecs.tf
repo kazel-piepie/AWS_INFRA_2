@@ -66,9 +66,9 @@ resource "aws_security_group" "frontend_ecs_alb" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "HTTPS from CloudFront"
-    from_port       = 443
-    to_port         = 443
+    description     = "HTTP from CloudFront"
+    from_port       = 80
+    to_port         = 80
     protocol        = "tcp"
     prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   }
@@ -176,16 +176,12 @@ resource "aws_lb_listener" "frontend_ecs_http" {
   protocol          = "HTTP"
 
   default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend_ecs.arn
   }
 
   tags = {
-    Name = "${local.name_prefix}-frontend-ecs-http-redirect"
+    Name = "${local.name_prefix}-frontend-ecs-http"
   }
 }
 
@@ -392,7 +388,7 @@ resource "aws_cloudfront_distribution" "frontend_ecs" {
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "https-only"
+      origin_protocol_policy = "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
