@@ -175,10 +175,9 @@ resource "aws_iam_role_policy" "ai_task_msk" {
 }
 
 # ---------------------------------------------------------------------------
-# Bedrock invoke permission for Claude Haiku via the cross-region inference
-# profile us.anthropic.claude-haiku-4-5-20251001-v1:0. The profile routes
-# through us-east-1 / us-east-2 / us-west-2, so the underlying foundation
-# models in all three regions must be allowed alongside the profile ARN.
+# Bedrock invoke permission. Named model ARNs are kept for reference; the
+# wildcard "*" grants invocation of any current or future Bedrock model
+# (applies to both dev and prod environments).
 # ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "ai_task_bedrock" {
   statement {
@@ -197,6 +196,7 @@ data "aws_iam_policy_document" "ai_task_bedrock" {
       "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
       "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
       "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6",
+      "*",
     ]
   }
 }

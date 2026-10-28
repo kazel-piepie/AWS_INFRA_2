@@ -243,6 +243,10 @@ resource "aws_ecs_service" "neo4j" {
     assign_public_ip = false
   }
 
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
+  }
+
   tags = {
     Name      = "rorr-lol-datacenter-neo4j"
     Component = "neo4j"
