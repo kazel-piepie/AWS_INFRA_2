@@ -107,5 +107,5 @@ locals {
   app_components = {}
 
   frontend_ecs_app_domain  = var.env == "prod" ? "ai-tmp-prod-app.rorr.club" : "ai-tmp-dev-app.rorr.club"
-  frontend_ecs_app_aliases = var.env == "prod" ? ["ai-tmp-prod-app.rorr.club", "ai-prod-app.rorr.club"] : ["ai-tmp-dev-app.rorr.club", "ai-dev-app.rorr.club"]
+  frontend_ecs_app_aliases = var.env == "prod" ? ["ai-tmp-prod-app.rorr.club", "ai-prod-app.rorr.club", "www.rorr.club", "rorr.club"] : ["ai-tmp-dev-app.rorr.club", "ai-dev-app.rorr.club"]
 }
