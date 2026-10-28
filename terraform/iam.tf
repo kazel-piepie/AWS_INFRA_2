@@ -203,3 +203,34 @@ resource "aws_iam_role_policy_attachment" "ollama_cloudwatch" {
   role       = aws_iam_role.ec2["ollama"].name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchFullAccess"
 }
+
+# Bedrock invoke permission for the Ollama EC2 host. Mirrors the ai-service ECS
+# task policy: named model ARNs kept for reference, wildcard "*" grants access
+# to any current or future Bedrock model (applies to both dev and prod).
+data "aws_iam_policy_document" "ollama_bedrock" {
+  statement {
+    sid    = "BedrockInvokeAll"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+    ]
+    resources = [
+      "arn:aws:bedrock:us-east-1:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+      "arn:aws:bedrock:us-east-1:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
+      "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6",
+      "*",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "ollama_bedrock" {
+  name   = "${local.name_prefix}-ollama-bedrock-invoke"
+  role   = aws_iam_role.ec2["ollama"].id
+  policy = data.aws_iam_policy_document.ollama_bedrock.json
+}
