@@ -63,7 +63,7 @@ locals {
   redis_node_type = {
     develop = "cache.t3.micro"
     staging = "cache.t3.small"
-    prod    = "cache.t3.micro"
+    prod    = "cache.t3.small"
   }
 
   # Single-node clusters here; prod scales out via a replication group (handled
