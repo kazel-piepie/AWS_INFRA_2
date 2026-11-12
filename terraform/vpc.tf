@@ -61,12 +61,36 @@ resource "aws_nat_gateway" "main" {
   depends_on = [aws_internet_gateway.main]
 }
 
+# ---------------------------------------------------------------------------
+# VPC peering routes (develop only).
+# pcx-014dd077674e446a7 peers ai-rorr-develop-vpc (10.20.0.0/16) with the
+# datacenter historical-DB VPC (10.40.0.0/16). Routes must be declared here
+# so terraform apply does not treat them as drift and delete them.
+# prod has no active peering connection; the list is empty there.
+# ---------------------------------------------------------------------------
+locals {
+  vpc_peering_routes = var.env == "develop" ? [
+    {
+      cidr_block                = "10.40.0.0/16"
+      vpc_peering_connection_id = "pcx-014dd077674e446a7"
+    }
+  ] : []
+}
+
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.main.id
+  }
+
+  dynamic "route" {
+    for_each = local.vpc_peering_routes
+    content {
+      cidr_block                = route.value.cidr_block
+      vpc_peering_connection_id = route.value.vpc_peering_connection_id
+    }
   }
 
   tags = {
@@ -80,6 +104,14 @@ resource "aws_route_table" "private" {
   route {
     cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.main.id
+  }
+
+  dynamic "route" {
+    for_each = local.vpc_peering_routes
+    content {
+      cidr_block                = route.value.cidr_block
+      vpc_peering_connection_id = route.value.vpc_peering_connection_id
+    }
   }
 
   tags = {
