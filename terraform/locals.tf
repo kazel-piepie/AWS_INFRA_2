@@ -27,10 +27,10 @@ locals {
       ollama   = "t3a.large"
     }
     prod = {
-      kafka_ui = "t3a.medium"
+      kafka_ui = "t3a.small"
       main_db  = "m6a.xlarge"
-      neo4j    = "m6a.large"
-      socket   = "m6a.large"
+      neo4j    = "t3a.medium"
+      socket   = "t3a.small"
       ollama   = "g6.xlarge"
     }
   }
@@ -63,7 +63,7 @@ locals {
   redis_node_type = {
     develop = "cache.t3.micro"
     staging = "cache.t3.small"
-    prod    = "cache.t3.medium"
+    prod    = "cache.t3.micro"
   }
 
   # Single-node clusters here; prod scales out via a replication group (handled
