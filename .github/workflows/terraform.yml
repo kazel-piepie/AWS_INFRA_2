@@ -50,9 +50,12 @@ jobs:
           terraform_version: 1.9.8
 
       - name: Terraform Init
+        env:
+          TFSTATE_BUCKET: ${{ secrets.TFSTATE_BUCKET }}
         run: |
+          BUCKET="${TFSTATE_BUCKET:-ai-rorr-tfstate-${ENV}}"
           terraform init -no-color \
-            -backend-config="bucket=ai-rorr-tfstate-${ENV}" \
+            -backend-config="bucket=${BUCKET}" \
             -backend-config="key=rorr/${ENV}/terraform.tfstate"
 
       - name: Terraform Format Check
