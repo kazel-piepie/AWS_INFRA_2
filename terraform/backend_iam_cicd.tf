@@ -186,10 +186,13 @@ data "aws_iam_policy_document" "backend_cicd" {
   }
 
   statement {
-    sid       = "CreateBackendDeployBucket"
-    effect    = "Allow"
-    actions   = ["s3:CreateBucket"]
-    resources = ["arn:aws:s3:::${local.name_prefix}-deploy"]
+    sid     = "CreateBackendDeployBucket"
+    effect  = "Allow"
+    actions = ["s3:CreateBucket"]
+    resources = [
+      "arn:aws:s3:::${local.name_prefix}-deploy",
+      "arn:aws:s3:::${local.s3_name_prefix}-deploy",
+    ]
   }
 
   statement {
@@ -200,7 +203,10 @@ data "aws_iam_policy_document" "backend_cicd" {
       "s3:GetObject",
       "s3:DeleteObject",
     ]
-    resources = ["arn:aws:s3:::${local.name_prefix}-deploy/*"]
+    resources = [
+      "arn:aws:s3:::${local.name_prefix}-deploy/*",
+      "arn:aws:s3:::${local.s3_name_prefix}-deploy/*",
+    ]
   }
 
   # --- EC2: describe socket instances (DescribeInstances has no resource-level support). ---

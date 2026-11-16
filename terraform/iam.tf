@@ -179,10 +179,13 @@ resource "aws_iam_role_policy" "ollama_s3_deploy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "DeployBucketList"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = ["arn:aws:s3:::${local.name_prefix}-deploy"]
+        Sid    = "DeployBucketList"
+        Effect = "Allow"
+        Action = ["s3:ListBucket"]
+        Resource = [
+          "arn:aws:s3:::${local.name_prefix}-deploy",
+          "arn:aws:s3:::${local.s3_name_prefix}-deploy",
+        ]
       },
       {
         Sid    = "DeployBucketObjects"
@@ -192,7 +195,10 @@ resource "aws_iam_role_policy" "ollama_s3_deploy" {
           "s3:PutObject",
           "s3:DeleteObject",
         ]
-        Resource = ["arn:aws:s3:::${local.name_prefix}-deploy/*"]
+        Resource = [
+          "arn:aws:s3:::${local.name_prefix}-deploy/*",
+          "arn:aws:s3:::${local.s3_name_prefix}-deploy/*",
+        ]
       }
     ]
   })
