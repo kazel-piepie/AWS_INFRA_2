@@ -1,6 +1,10 @@
 locals {
   name_prefix = "ai-rorr-${var.env}"
 
+  # S3 bucket names use newprod for the prod environment to avoid name collision
+  # with existing RORR prod account (301338930608) buckets in the global namespace.
+  s3_name_prefix = var.env == "prod" ? "ai-rorr-newprod" : "ai-rorr-${var.env}"
+
   # prod uses three AZs so the VPC has capacity for future MSK/EC2 growth;
   # develop/staging keep two AZs to avoid MSK cluster recreation.
   azs = var.env == "prod" ? [

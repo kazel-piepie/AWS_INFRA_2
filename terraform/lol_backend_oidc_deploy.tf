@@ -4,6 +4,15 @@
 # The account had no token.actions.githubusercontent.com provider (verified via
 # `aws iam list-open-id-connect-providers`), so it is created here.
 # ---------------------------------------------------------------------------
+
+# In the prod (MCP) account the OIDC provider was created out-of-band before
+# the first Terraform apply; this import block is a no-op when the resource is
+# already managed by Terraform (develop/staging).
+import {
+  to = aws_iam_openid_connect_provider.github
+  id = "arn:aws:iam::${local.account_id}:oidc-provider/token.actions.githubusercontent.com"
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
