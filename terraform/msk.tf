@@ -21,8 +21,11 @@ resource "aws_msk_cluster" "main" {
   number_of_broker_nodes = local.msk_broker_nodes[var.env]
 
   broker_node_group_info {
-    instance_type   = local.msk_broker_instance_type[var.env]
-    client_subnets  = aws_subnet.private[*].id
+    instance_type = local.msk_broker_instance_type[var.env]
+    # prod: pinned to private[0,1] (us-east-1a/b) so broker count stays a
+    # multiple of 2 and can scale 2→4 without cluster recreation when a third
+    # AZ subnet is added. develop/staging: use all private subnets (2 AZs).
+    client_subnets  = var.env == "prod" ? [aws_subnet.private[0].id, aws_subnet.private[1].id] : aws_subnet.private[*].id
     security_groups = [aws_security_group.msk.id]
 
     storage_info {
