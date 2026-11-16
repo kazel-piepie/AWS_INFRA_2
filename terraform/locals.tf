@@ -1,13 +1,32 @@
 locals {
   name_prefix = "ai-rorr-${var.env}"
 
-  # Three AZs: MSK client_subnets is pinned to private[0,1] (two AZs) so the
-  # broker count stays a multiple of 2 and can grow 2→4 without subnet changes.
-  azs = ["${var.region}a", "${var.region}b", "${var.region}c"]
+  # prod uses three AZs so the VPC has capacity for future MSK/EC2 growth;
+  # develop/staging keep two AZs to avoid MSK cluster recreation.
+  azs = var.env == "prod" ? [
+    "${var.region}a", "${var.region}b", "${var.region}c"
+  ] : [
+    "${var.region}a", "${var.region}b"
+  ]
 
   # Public subnets: one per AZ. Private subnets: one per AZ.
-  public_subnet_cidrs  = [cidrsubnet(var.vpc_cidr, 8, 0), cidrsubnet(var.vpc_cidr, 8, 1), cidrsubnet(var.vpc_cidr, 8, 2)]
-  private_subnet_cidrs = [cidrsubnet(var.vpc_cidr, 8, 10), cidrsubnet(var.vpc_cidr, 8, 11), cidrsubnet(var.vpc_cidr, 8, 12)]
+  public_subnet_cidrs = var.env == "prod" ? [
+    cidrsubnet(var.vpc_cidr, 8, 0),
+    cidrsubnet(var.vpc_cidr, 8, 1),
+    cidrsubnet(var.vpc_cidr, 8, 2),
+  ] : [
+    cidrsubnet(var.vpc_cidr, 8, 0),
+    cidrsubnet(var.vpc_cidr, 8, 1),
+  ]
+
+  private_subnet_cidrs = var.env == "prod" ? [
+    cidrsubnet(var.vpc_cidr, 8, 10),
+    cidrsubnet(var.vpc_cidr, 8, 11),
+    cidrsubnet(var.vpc_cidr, 8, 12),
+  ] : [
+    cidrsubnet(var.vpc_cidr, 8, 10),
+    cidrsubnet(var.vpc_cidr, 8, 11),
+  ]
 
   # Per-environment EC2 instance types (x86 processors; t3a/m6a are AMD x86).
   # ollama in develop uses g6.xlarge (NVIDIA L4 GPU) for GPU-accelerated model
@@ -76,7 +95,7 @@ locals {
     prod    = 1
   }
 
-  # MSK broker count. client_subnets is pinned to private[0,1] (2 AZs) in
+  # MSK broker count. prod client_subnets is pinned to private[0,1] (2 AZs) in
   # msk.tf, so broker count must be a multiple of 2: start at 2, scale to 4.
   msk_broker_nodes = {
     develop = 2
