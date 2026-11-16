@@ -186,8 +186,8 @@ data "aws_iam_policy_document" "backend_cicd" {
   }
 
   statement {
-    sid       = "CreateBackendDeployBucket"
-    effect    = "Allow"
+    sid     = "CreateBackendDeployBucket"
+    effect  = "Allow"
     actions = ["s3:CreateBucket"]
     resources = [
       "arn:aws:s3:::${local.name_prefix}-deploy",
