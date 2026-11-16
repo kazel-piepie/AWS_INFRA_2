@@ -3,6 +3,15 @@
 # this per-concern secret is managed here. The neo4j instance bootstrap writes
 # the live uri/username/password into it, so the initial values are empty
 # placeholders and secret_string changes are ignored after creation.
+
+# In the prod (MCP) account this secret was created out-of-band before the
+# first Terraform apply; this import block is a no-op when the resource is
+# already managed by Terraform (develop/staging).
+import {
+  to = aws_secretsmanager_secret.neo4j
+  id = "rorr/${var.env}/neo4j"
+}
+
 resource "aws_secretsmanager_secret" "neo4j" {
   name        = "rorr/${var.env}/neo4j"
   description = "RORR Neo4j graph database connection info"
