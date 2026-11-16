@@ -16,7 +16,7 @@ data "aws_cloudfront_cache_policy" "caching_optimized" {
 }
 
 locals {
-  frontend_bucket_name = "${local.name_prefix}-frontend"
+  frontend_bucket_name = "${local.s3_name_prefix}-frontend"
   frontend_domain      = var.env == "prod" ? "ai-prod-app.rorr.club" : "ai-dev-app.rorr.club"
 }
 
