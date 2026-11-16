@@ -1,12 +1,13 @@
 locals {
   name_prefix = "ai-rorr-${var.env}"
 
-  # Two AZs (MSK provisioned requires brokers as a multiple of subnet count).
-  azs = ["${var.region}a", "${var.region}b"]
+  # Three AZs: MSK client_subnets is pinned to private[0,1] (two AZs) so the
+  # broker count stays a multiple of 2 and can grow 2→4 without subnet changes.
+  azs = ["${var.region}a", "${var.region}b", "${var.region}c"]
 
   # Public subnets: one per AZ. Private subnets: one per AZ.
-  public_subnet_cidrs  = [cidrsubnet(var.vpc_cidr, 8, 0), cidrsubnet(var.vpc_cidr, 8, 1)]
-  private_subnet_cidrs = [cidrsubnet(var.vpc_cidr, 8, 10), cidrsubnet(var.vpc_cidr, 8, 11)]
+  public_subnet_cidrs  = [cidrsubnet(var.vpc_cidr, 8, 0), cidrsubnet(var.vpc_cidr, 8, 1), cidrsubnet(var.vpc_cidr, 8, 2)]
+  private_subnet_cidrs = [cidrsubnet(var.vpc_cidr, 8, 10), cidrsubnet(var.vpc_cidr, 8, 11), cidrsubnet(var.vpc_cidr, 8, 12)]
 
   # Per-environment EC2 instance types (x86 processors; t3a/m6a are AMD x86).
   # ollama in develop uses g6.xlarge (NVIDIA L4 GPU) for GPU-accelerated model
@@ -28,7 +29,7 @@ locals {
     }
     prod = {
       kafka_ui = "t3a.small"
-      main_db  = "m6a.xlarge"
+      main_db  = "t3a.medium"
       neo4j    = "t3a.medium"
       socket   = "t3a.small"
       ollama   = "g6.xlarge"
@@ -75,17 +76,18 @@ locals {
     prod    = 1
   }
 
-  # MSK broker count (must be a multiple of the number of client subnets).
+  # MSK broker count. client_subnets is pinned to private[0,1] (2 AZs) in
+  # msk.tf, so broker count must be a multiple of 2: start at 2, scale to 4.
   msk_broker_nodes = {
     develop = 2
     staging = 2
-    prod    = 4
+    prod    = 2
   }
 
   msk_broker_instance_type = {
     develop = "kafka.t3.small"
     staging = "kafka.t3.small"
-    prod    = "kafka.m5.large"
+    prod    = "kafka.t3.small"
   }
 
   specs = local.ec2_instance_types[var.env]
@@ -106,6 +108,6 @@ locals {
   # those workloads now run as ECS Fargate services in lol_backend_ecs.tf.
   app_components = {}
 
-  frontend_ecs_app_domain  = var.env == "prod" ? "ai-tmp-prod-app.rorr.club" : "ai-tmp-dev-app.rorr.club"
-  frontend_ecs_app_aliases = var.env == "prod" ? ["ai-tmp-prod-app.rorr.club", "ai-prod-app.rorr.club", "www.rorr.club", "rorr.club"] : ["ai-tmp-dev-app.rorr.club", "ai-dev-app.rorr.club"]
+  frontend_ecs_app_domain  = var.env == "prod" ? "www1.rorr.club" : "ai-tmp-dev-app.rorr.club"
+  frontend_ecs_app_aliases = var.env == "prod" ? ["www1.rorr.club"] : ["ai-tmp-dev-app.rorr.club", "ai-dev-app.rorr.club"]
 }
