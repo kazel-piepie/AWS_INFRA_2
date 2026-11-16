@@ -5,7 +5,7 @@ locals {
   # develop/staging keep two AZs to avoid MSK cluster recreation.
   azs = var.env == "prod" ? [
     "${var.region}a", "${var.region}b", "${var.region}c"
-  ] : [
+    ] : [
     "${var.region}a", "${var.region}b"
   ]
 
@@ -14,7 +14,7 @@ locals {
     cidrsubnet(var.vpc_cidr, 8, 0),
     cidrsubnet(var.vpc_cidr, 8, 1),
     cidrsubnet(var.vpc_cidr, 8, 2),
-  ] : [
+    ] : [
     cidrsubnet(var.vpc_cidr, 8, 0),
     cidrsubnet(var.vpc_cidr, 8, 1),
   ]
@@ -23,7 +23,7 @@ locals {
     cidrsubnet(var.vpc_cidr, 8, 10),
     cidrsubnet(var.vpc_cidr, 8, 11),
     cidrsubnet(var.vpc_cidr, 8, 12),
-  ] : [
+    ] : [
     cidrsubnet(var.vpc_cidr, 8, 10),
     cidrsubnet(var.vpc_cidr, 8, 11),
   ]
