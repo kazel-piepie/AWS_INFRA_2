@@ -1,32 +1,33 @@
 # ---------------------------------------------------------------------------
-# IAM user "ai-rorr-develop-resources-uploader".
+# IAM user "${local.name_prefix}-resources-uploader".
 #
-# This user was created out-of-band (directly in the AWS console, 2026-06-09)
-# and was never present in this repo's Terraform state. It is a human,
-# console-only account (a login profile exists and is in active use; there is
-# no programmatic access key) used to upload frontend resource files to the
-# ai-rorr-develop-frontend-resources S3 bucket (see frontend-resources.tf).
+# A human, console-only account (login profile; no access key) used to upload
+# frontend resource files to the ${local.s3_name_prefix}-frontend-resources S3
+# bucket (see frontend-resources.tf).
 #
-# This file adopts the user into Terraform via `import` blocks (declared here;
-# the actual state import runs on the next CI/CD apply after merge) and extends
-# its single inline policy with full CloudFront access.
+# develop: user was created out-of-band (AWS console, 2026-06-09) and is
+#   adopted into Terraform via the import blocks below.
+# prod: user does not exist yet; Terraform creates it on the next apply.
 #
 # Deliberately NOT managed here:
-#   - aws_iam_user_login_profile: the console password is already set and the
-#     account is actively used by a person. Importing/managing it risks a forced
-#     password reset or state drift, so the login profile is left out-of-band.
-#   - aws_iam_access_key: this user has no programmatic access key and needs none.
+#   - aws_iam_user_login_profile: left out-of-band to avoid a forced password
+#     reset on the already-active develop account; set manually after first apply
+#     for prod.
+#   - aws_iam_access_key: this user needs no programmatic access key.
 #
-# Environment gating: the same Terraform code is applied to develop, staging and
-# prod (each against its own AWS account). This user exists ONLY in the develop
-# account, so both the resource and its import are gated to env == "develop";
-# without the gate, staging/prod applies would fail importing a user that does
-# not exist there.
+# Environment gating: active only in develop and prod. staging is excluded
+# because there is no corresponding human account there.
+# Import gating: import blocks run only for develop (where the out-of-band user
+# exists); prod creates a fresh user, so no import is needed.
 # ---------------------------------------------------------------------------
 
 locals {
-  # Non-empty only in develop, where this out-of-band user actually exists.
-  resources_uploader_envs = var.env == "develop" ? toset(["develop"]) : toset([])
+  # Non-empty in develop and prod; empty in staging.
+  resources_uploader_envs = contains(["develop", "prod"], var.env) ? toset([var.env]) : toset([])
+
+  # Import only applies to develop, where the user was created out-of-band.
+  # prod creates a new user, so no import block is needed there.
+  resources_uploader_import_envs = var.env == "develop" ? toset(["develop"]) : toset([])
 }
 
 # ---------------------------------------------------------------------------
@@ -64,7 +65,10 @@ data "aws_iam_policy_document" "resources_uploader" {
       "s3:GetObject",
       "s3:GetObjectAcl",
     ]
-    resources = ["arn:aws:s3:::ai-rorr-develop-frontend-resources/*"]
+    resources = [
+      "arn:aws:s3:::${local.name_prefix}-frontend-resources/*",
+      "arn:aws:s3:::${local.s3_name_prefix}-frontend-resources/*",
+    ]
   }
 
   # --- Existing (unchanged): bucket-level access to the resources bucket. ---
@@ -79,7 +83,10 @@ data "aws_iam_policy_document" "resources_uploader" {
       "s3:GetBucketCORS",
       "s3:GetBucketVersioning",
     ]
-    resources = ["arn:aws:s3:::ai-rorr-develop-frontend-resources"]
+    resources = [
+      "arn:aws:s3:::${local.name_prefix}-frontend-resources",
+      "arn:aws:s3:::${local.s3_name_prefix}-frontend-resources",
+    ]
   }
 
   # --- Existing (unchanged): list all buckets (console navigation). ---
@@ -116,14 +123,14 @@ resource "aws_iam_user_policy" "resources_uploader" {
 #   aws_iam_user_policy     import id: <user_name>:<policy_name>
 # ---------------------------------------------------------------------------
 import {
-  for_each = local.resources_uploader_envs
+  for_each = local.resources_uploader_import_envs
 
   to = aws_iam_user.resources_uploader[each.key]
   id = "${local.name_prefix}-resources-uploader"
 }
 
 import {
-  for_each = local.resources_uploader_envs
+  for_each = local.resources_uploader_import_envs
 
   to = aws_iam_user_policy.resources_uploader[each.key]
   id = "${local.name_prefix}-resources-uploader:${local.name_prefix}-resources-uploader-policy"
