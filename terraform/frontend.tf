@@ -95,7 +95,7 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
-  aliases             = [local.frontend_domain]
+  aliases             = var.env == "prod" ? [local.frontend_domain] : []
   comment             = "RORR frontend distribution (${var.env})"
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
