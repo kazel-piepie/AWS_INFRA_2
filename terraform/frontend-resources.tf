@@ -18,7 +18,7 @@
 
 locals {
   frontend_resources_bucket_name = "${local.s3_name_prefix}-frontend-resources"
-  frontend_resources_domain        = var.env == "prod" ? "ai-newprod-resources.rorr.club" : "ai-dev-resources.rorr.club"
+  frontend_resources_domain      = var.env == "prod" ? "ai-newprod-resources.rorr.club" : "ai-dev-resources.rorr.club"
   frontend_resources_app_aliases = var.env == "prod" ? ["ai-newprod-resources.rorr.club", "ai-prod-resources.rorr.club"] : ["ai-dev-resources.rorr.club"]
 }
 
