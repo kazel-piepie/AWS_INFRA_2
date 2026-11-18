@@ -18,7 +18,8 @@
 
 locals {
   frontend_resources_bucket_name = "${local.s3_name_prefix}-frontend-resources"
-  frontend_resources_domain      = var.env == "prod" ? "ai-newprod-resources.rorr.club" : "ai-dev-resources.rorr.club"
+  frontend_resources_domain        = var.env == "prod" ? "ai-newprod-resources.rorr.club" : "ai-dev-resources.rorr.club"
+  frontend_resources_app_aliases = var.env == "prod" ? ["ai-newprod-resources.rorr.club", "ai-prod-resources.rorr.club"] : ["ai-dev-resources.rorr.club"]
 }
 
 # ---------------------------------------------------------------------------
@@ -100,7 +101,7 @@ resource "aws_cloudfront_distribution" "frontend_resources" {
   enabled         = true
   is_ipv6_enabled = true
   comment         = "RORR frontend resources distribution (${var.env})"
-  aliases         = [local.frontend_resources_domain]
+  aliases         = local.frontend_resources_app_aliases
   price_class     = "PriceClass_100"
 
   # No default_root_object: resource files are addressed directly by key.
