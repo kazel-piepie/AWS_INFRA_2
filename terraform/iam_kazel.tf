@@ -1,11 +1,29 @@
 # ---------------------------------------------------------------------------
 # Dedicated IAM user "kazel" for human access to the DB and Kafka UI instances
 # via SSM. No broad SSM access: kazel may open an SSM StartSession
-# port-forwarding tunnel to the main_db, kafka_ui and neo4j instances, and an
-# interactive shell session to the kafka_ui instance only. Kazel may manage
-# only its own sessions. Programmatic (AWS CLI) and console access are both
-# enabled; the access key and console password are stored in Secrets Manager.
+# port-forwarding tunnel to the main_db, kafka_ui, neo4j and historical_db
+# instances, and an interactive shell session to the kafka_ui instance only.
+# Kazel may manage only its own sessions. Programmatic (AWS CLI) and console
+# access are both enabled; the access key and console password are stored in
+# Secrets Manager.
 # ---------------------------------------------------------------------------
+
+# historical DB is managed by a separate Terraform state (rorr-dc-historical).
+# Look it up by tag so the ARN stays correct if the instance is ever replaced.
+data "aws_instance" "historical_db" {
+  filter {
+    name   = "tag:Name"
+    values = ["rorr-dc-historical-${var.env}-db"]
+  }
+  filter {
+    name   = "instance-state-name"
+    values = ["running"]
+  }
+}
+
+data "aws_secretsmanager_secret" "historical_db_admin" {
+  name = "rorr-dc-historical/${var.env}/db/admin"
+}
 
 resource "aws_iam_user" "kazel" {
   name = "${local.name_prefix}-kazel"
@@ -38,8 +56,8 @@ resource "aws_iam_user_login_profile" "kazel" {
 
 # ---------------------------------------------------------------------------
 # SSM access policy for kazel.
-#   - StartPortForwardingSession: port-forwarding tunnel to main_db, kafka_ui
-#     and neo4j using the two AWS port-forwarding documents.
+#   - StartPortForwardingSession: port-forwarding tunnel to main_db, kafka_ui,
+#     neo4j and historical_db using the two AWS port-forwarding documents.
 #   - StartInteractiveSession: interactive shell session to kafka_ui only (no
 #     document restriction so aws ssm start-session works directly).
 #   - Terminate/Resume: only sessions owned by kazel (aws:username condition via
@@ -54,6 +72,7 @@ data "aws_iam_policy_document" "kazel_ssm_port_forward" {
       aws_instance.main_db.arn,
       aws_instance.kafka_ui.arn,
       aws_instance.neo4j.arn,
+      data.aws_instance.historical_db.arn,
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSession",
       "arn:aws:ssm:${local.region_id}::document/AWS-StartPortForwardingSessionToRemoteHost",
     ]
@@ -98,8 +117,8 @@ resource "aws_iam_user_policy_attachment" "kazel_cloudwatch_read_only" {
 
 # ---------------------------------------------------------------------------
 # Read-only access to the shared ai/rorr-infra/${env} secret so kazel can look
-# up infra inventory values. Scoped to the exact secret ARN (no wildcard) via
-# the pre-existing data source in frontend.tf.
+# up infra inventory values, and to the historical DB admin secret for direct
+# DB access.
 # ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "kazel_rorr_infra_secret_read" {
   statement {
@@ -111,6 +130,7 @@ data "aws_iam_policy_document" "kazel_rorr_infra_secret_read" {
     ]
     resources = [
       data.aws_secretsmanager_secret.rorr_infra.arn,
+      data.aws_secretsmanager_secret.historical_db_admin.arn,
     ]
   }
 }
