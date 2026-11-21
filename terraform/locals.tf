@@ -133,4 +133,11 @@ locals {
 
   frontend_ecs_app_domain  = var.env == "prod" ? "www1.rorr.club" : "ai-tmp-dev-app.rorr.club"
   frontend_ecs_app_aliases = var.env == "prod" ? ["www1.rorr.club", "ai-newprod-app.rorr.club", "rorr.club", "www.rorr.club", "ai-prod-app.rorr.club"] : ["ai-tmp-dev-app.rorr.club", "ai-dev-app.rorr.club"]
+
+  # rorr-dc-historical uses "dev" where AWS_INFRA_2 uses "develop".
+  historical_env = {
+    develop = "dev"
+    staging = "staging"
+    prod    = "prod"
+  }
 }
