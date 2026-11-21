@@ -13,7 +13,7 @@
 data "aws_instance" "historical_db" {
   filter {
     name   = "tag:Name"
-    values = ["rorr-dc-historical-${var.env}-db"]
+    values = ["rorr-dc-historical-${local.historical_env[var.env]}-db"]
   }
   filter {
     name   = "instance-state-name"
@@ -22,7 +22,7 @@ data "aws_instance" "historical_db" {
 }
 
 data "aws_secretsmanager_secret" "historical_db_admin" {
-  name = "rorr-dc-historical/${var.env}/db/admin"
+  name = "rorr-dc-historical/${local.historical_env[var.env]}/db/admin"
 }
 
 resource "aws_iam_user" "kazel" {
